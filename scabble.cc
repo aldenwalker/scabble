@@ -661,11 +661,14 @@ vector<vector<rational> > ball_in_positive_quadrant(vector<vector<string> >& cha
 
 
 
-void draw_ball(string fileName, vector<vector<string> >& chains, 
+void draw_ball(string fname, vector<vector<string> >& chains, 
                                 vector<int>& weights,
                                 vector<vector<rational> >& points) {
   int i,j;
   fstream outfile;
+  
+  string fileName = fname + ".eps";
+  
   outfile.open(fileName.c_str(), fstream::out);
   
   outfile << "\%!PS-Adobe-2.0 EPSF-2.0\n";
@@ -885,6 +888,72 @@ void create_print_unit_ball(vector<vector<string> >& chains,
   
 }
 
+
+
+
+/*****************************************************************************/
+/* draw the unit ball in 3d, outputting to povray and Mathematica            */
+/*****************************************************************************/
+void draw_ball_3D(string fileName, vector<vector<string> >& chains, 
+                                   vector<int>& weights, 
+                                   vector<vector<rational> >& allVertices,
+                                   vector<vector<int> >& allTriangles){
+  string povrayFileName = filename + ".pov";
+  string MathematicaFileName = filename + ".txt";
+  fstream outfile;
+ 
+  //write the povray file out
+  outfile.open(povrayFileName.c_str(), fstream::out);
+  
+  //first, the preamble
+  outfile << "background { color Cyan }\n";
+  outfile << "camera {\n";
+  outfile << "\tlocation <5, 5, -8>\n";
+  outfile << "\tlook_at <0, 0, 0>\n";
+  outfile << "}\n";
+  outfile << "light_source { <2, 6, -3> color White}\n";
+  
+  //now, list the vertices
+  outfile << "mesh2 {\n";
+  outfile << "\tvertex_vectors {\n";
+  outfile << "\t\t" << allVertices.size() << ",\n";
+  for (i=0; i<allVertices.size(); i++) {
+    outfile << "\t\t<" << allVertices[i][0].get_d() << ","
+                       << allVertices[i][1].get_d() << ","
+                       << allVertices[i][2].get_d() << ">,\n";
+  }
+  outfile << "\t}\n";
+  //and the triangles
+  outfile << "\tface_indices {\n";
+  outfile << "\t\t" << allTriangles.size() << ",\n";
+  for (i=0; i<allTriangles.size(); i++) {
+    outfile << "\t\t<" << allTriangles[i][0] << ","
+                       << allTriangles[i][1] << ","
+                       << allTriangles[i][2] << ">,\n";
+  }
+  outfile << "\t}\n";
+  outfile << "pigment {rgb 0.8}\n";
+  outfile << "}\n";
+  outfile.close();
+  
+  
+  //write out the list of vertices to a text file (for mathematica, say)
+  outfile.open(MathematicaFileName.c_str(), fstream::out);
+  outfile << "{";
+  for (i=0; i<allVertices.size(); i++) {
+    outfile << "{" << allVertices[i][0] << ", " 
+                   << allVertices[i][1] << ", " 
+                   << allVertices[i][1] << "}, ";
+  }
+  outfile << "}\n";
+  outfile.close();
+  
+  
+}
+
+
+
+
 /*****************************************************************************/
 /* create the unit ball in 3 dimensions!!                                    */
 /*****************************************************************************/
@@ -951,9 +1020,39 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
   
   vector<vector<rational> > allVertices(0);
   vector<vector<int> > allTriangles(0);
+  vector<int> tempTriangle(3);
+  vector<rational> tempVertex(3);
   int currentOffset = 0;
+  for (orthant=0; orthant<4; orthant++) {
+    for (i=0; i<orthantVertices[orthant].size(); i++) {
+      allVertices.push_back(orthantVertices[orthant][i]);
+    }
+    for (i=0; i<orthantTriangles[orthant].size(); i++) {
+      for (j=0; j<3; j++) {
+        tempTriangle[j] = orthantTriangles[orthant][i][j] + currentOffset;
+      }
+    }
+    currentOffset += allVertices.size();
+  }
   
+  //now reflect the whole thing through the origin
+  int allTrianglesTop = allTriangles.size();
+  int allVerticesTop = allVertices.size();
+  for (i=0; i<allVerticesTop; i++) {
+    for (j=0; j<3; j++) {
+      tempVertex[j] = -allVertices[i][j];
+    }
+    allVertices.push_back(tempVertex);
+  }
+  for (i=0; i<allTrianglesTop; i++) {
+    for (j=0; j<3; j++) {
+      tempTriangle[j] = allTriangles[i][j] + currentOffset;
+    }
+    allTriangles.push_back(tempTriangle);
+  }
   
+  //ok now we've got a list of all of them, so print it
+  draw_ball_3D(chains, weights, allTriangles, allVertices);  
   
   
 }

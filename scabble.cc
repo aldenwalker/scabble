@@ -1,7 +1,7 @@
 /**************************************************************
 *                                                             *
 * scabble - calculates the unit scl ball in a 2-plane spanned *
-*           by two chains                                     *
+*           by two chains or in a 3d slice spanned by 3       *
 *                                                             *  
 *                                                             *
 *   Copyright Danny Calegari and                              *
@@ -158,6 +158,80 @@ void generate_polygons(vector<string> w,
 }
 
 
+/*****************************************************************************/
+/* find the scl of a particular point in the space spanned by the chains     */
+/* this works for arbitrary dimension                                        */
+/*****************************************************************************/
+rational point_scl(vector<vector<string> >&chains, 
+                   vector<arc>& arc_list,
+                   vector<polygon>& polygon_list,
+                   vector<int>& weights,
+                   RatMat* constraints,
+                   vector<int>& equalityType,
+                   vector<rational>& point, 
+                   scallop_lp_solver solver, 
+                   int VERBOSE) {
+  int i,j,k;
+  int firstWordNumber;
+  int numChains = (int)chains.size();
+  vector<rational> coef(numChains, rational());
+  //note this is n new constraints; we will add these rows to constraints, and
+  //get rid of them later
+  RatMat_change_num_rows(constraints, constraints->nR+numChains);
+  
+  //we just have to check that delta_g = point[0] and delta_h=point[1]
+  for (i=0; i<(int)polygon_list.size(); i++) {  //for each poly
+ 
+    for (j=0; j<numChains; j++) {
+      coef[j] = rational(0,1);                  //this will be the coefficient of this polygon in each new row j
+    }
+    
+    for (j=0; j<polygon_list[i].size; j++) {  //go through the edges
+      firstWordNumber = 0;                    //this is the word index of the first word in the chain
+      for (k=0; k<numChains; k++) {
+        if (arc_list[polygon_list[i].arc[j]].first_word == firstWordNumber &&
+            arc_list[polygon_list[i].arc[j]].first == 0) {                        //if we're looking at the first word in a chain, first letter
+          coef[k] = coef[k] + (rational(1,1)/weights[firstWordNumber]);
+        }
+        firstWordNumber+=chains[k].size();
+      }
+    }
+    
+    //now set the entries in the matrix
+    //so row constraints->nR-(1+j) is the new row for chain j
+    for (j=0; j<numChains; j++) {
+      RatMat_set_int(constraints, constraints->nR-(1+j), i, coef[j].n(),
+                                                            coef[j].d());
+    }
+  }
+  
+  //set the right hand sides -- we want weight*word = point, and we've divided 
+  //by weight above, so the RHS is just point, and not these are all equalities
+  for (j=0; j<numChains; j++) {
+    RatMat_set_int(constraints, constraints->nR-(1+j), 
+                                constraints->nC-1,
+                                point[j].n(),
+                                point[j].d());
+    equalityType.push_back(0:
+  }
+                               
+  
+   //Now the constraints matrix and equality type are all set up -- we just need
+  //to do the linear programming
+  vector<rational> solutionVector(constraints->nC-1, rational());
+  rational scl;
+  linear_program_from_ratmat( polygon_list,solutionVector, scl, constraints, equalityType, solver, VERBOSE ) ;
+      //cout << "About to reset mem functions\n";
+    //mp_set_memory_functions(0, 0, 0);
+  //Now, the answers *should* be decimal versions of exact rational numbers
+  //so we should be able to convert them with rat approx:
+  //rational ratScl = approxRat(scl);
+  
+  RatMat_change_num_rows(constraints, constraints->nR-numChains);
+  equalityType.resize(constraints->nR);
+  
+  return scl;
+}
 
 
 /*****************************************************************************
@@ -353,84 +427,33 @@ vector<rational> min_point_on_line(vector<vector<string> >&chains,
 
 
 
+/*****************************************************************************/
+/* this generalizes the method above to arbitrary dimensions                 */
+/* we've already restricted to the subspace spanned by the chains -- here    */
+/* we expect n+1
+void min_scl_over_simplex(chains, arc_list, polygon_list, weights,
+                                                                 constraints,
+                                                                 equalityType,
+                                                                 vertices[currentTriangle[0]],
+                                                                 vertices[currentTriangle[1]],
+                                                                 vertices[currentTriangle[2]],
+                                                                 solver,
+                                                                 VERBOSE,
+                                                                 newVertex)
 
 
 
-
-
-
-
-//find the scl of a particular point 
-rational point_scl(vector<vector<string> >&chains, 
-                   vector<arc>& arc_list,
-                   vector<polygon>& polygon_list,
-                   vector<int>& weights,
-                   RatMat* constraints,
-                   vector<int>& equalityType,
-                   vector<rational>& point, 
-                   scallop_lp_solver solver, 
-                   int VERBOSE) {
-  int i,j,k;
-  int firstWordNumber;
-  int numChains = (int)chains.size();
-  vector<rational> coef(2, rational());
-  //note this is 2 new constraints; we will add these rows to constraints, and
-  //get rid of them later
-  RatMat_change_num_rows(constraints, constraints->nR+2);
-  
-  //we just have to check that delta_g = point[0] and delta_h=point[1]
-  for (i=0; i<(int)polygon_list.size(); i++) {  //for each poly
- 
-    coef[0] = rational(0,1);                      //this will be the coefficient
-    coef[1] = rational(0,1);
-    
-    for (j=0; j<polygon_list[i].size; j++) {  //go through the edges
-      firstWordNumber = 0;                    //this is the word index of the first word in the chain
-      for (k=0; k<numChains; k++) {
-        if (arc_list[polygon_list[i].arc[j]].first_word == firstWordNumber &&
-            arc_list[polygon_list[i].arc[j]].first == 0) {                        //if we're looking at the first word in a chain, first letter
-          coef[k] = coef[k] + (rational(1,1)/weights[firstWordNumber]);
-        }
-        firstWordNumber+=chains[k].size();
-      }
-    }
-    
-    RatMat_set_int(constraints, constraints->nR-2, i, coef[0].n(), coef[0].d());
-    RatMat_set_int(constraints, constraints->nR-1, i, coef[1].n(), coef[1].d());
-  }
-  RatMat_set_int(constraints, constraints->nR-2, constraints->nC-1, point[0].n(), point[0].d());
-  RatMat_set_int(constraints, constraints->nR-1, constraints->nC-1, point[1].n(), point[1].d());
-  equalityType.push_back(0);
-  equalityType.push_back(0);
-  
-   //Now the constraints matrix and equality type are all set up -- we just need
-  //to do the linear programming
-  vector<rational> solutionVector(constraints->nC-1, rational());
-  rational scl;
-  linear_program_from_ratmat( polygon_list,solutionVector, scl, constraints, equalityType, solver, VERBOSE ) ;
-      //cout << "About to reset mem functions\n";
-    //mp_set_memory_functions(0, 0, 0);
-  //Now, the answers *should* be decimal versions of exact rational numbers
-  //so we should be able to convert them with rat approx:
-  //rational ratScl = approxRat(scl);
-  
-  RatMat_change_num_rows(constraints, constraints->nR-2);
-  equalityType.resize(constraints->nR);
-  
-  return scl;
-}
-
-
-
-
-
-
-// this function creates the basic constraints (arc constraints, chains)
-void create_constraint_matrix(vector<vector<string> >& chains, vector<arc>& arc_list,
-                                               vector<polygon>& polygon_list,
-                                               vector<int>& weights,
-                                               RatMat* constraints,
-                                               vector<int>& equalityType) {
+/*****************************************************************************/
+/* creates the basic constraint matrix (the restrictions from the arcs, plus */
+/* the constraints saying that the boundary is ag + bh + ck (or just two)    */
+/* this function works for 2d *and* 3d (actually, for any d)                 */
+/*****************************************************************************/
+void create_constraint_matrix(vector<vector<string> >& chains, 
+                              vector<arc>& arc_list,
+                              vector<polygon>& polygon_list,
+                              vector<int>& weights,
+                              RatMat* constraints,
+                              vector<int>& equalityType) {
   
   int arc_list_length = arc_list.size();
   int polygon_list_length = polygon_list.size();
@@ -496,7 +519,6 @@ void create_constraint_matrix(vector<vector<string> >& chains, vector<arc>& arc_
   }
   
   offset += arc_list_length/2;
-  //the offset is now polygon_list_length + arc_list_length/2
   
   //each chain must appear as one -- that if we have aw + bv, they must appear
   //as caw + cbv = c(aw+bv) (if the weights are 1, then just the same # of times)
@@ -537,7 +559,9 @@ void create_constraint_matrix(vector<vector<string> >& chains, vector<arc>& arc_
 
 
 
-
+/*****************************************************************************/
+/* find the unit ball in the positive qudrant in 2 dimensions                */
+/*****************************************************************************/
 vector<vector<rational> > ball_in_positive_quadrant(vector<vector<string> >& chains,
                                                      vector<string> wordList,
                                                      vector<int> weights,
@@ -661,6 +685,9 @@ vector<vector<rational> > ball_in_positive_quadrant(vector<vector<string> >& cha
 
 
 
+/*****************************************************************************/
+/* draws the unit ball to an eps file                                        */
+/*****************************************************************************/
 void draw_ball(string fname, vector<vector<string> >& chains, 
                                 vector<int>& weights,
                                 vector<vector<rational> >& points) {
@@ -794,6 +821,10 @@ void draw_ball(string fname, vector<vector<string> >& chains,
 }
 
 
+    ball_in_positive_orthant(chains, weights, maxjun, solver, VERBOSE,
+                             orthantVertices[orthant],
+                             orthantTriangles[orthant]);
+
 /*****************************************************************************/
 /* create the unit ball in 2 dimensions                                      */
 /*****************************************************************************/
@@ -889,6 +920,188 @@ void create_print_unit_ball(vector<vector<string> >& chains,
 }
 
 
+
+/*****************************************************************************/
+/* split a triangle along edge edgeToSplit and generate two new triangles    */
+/*****************************************************************************/
+void split_triangle_edge(vector<int>& currentTriangle, int triangleEdge, 
+                                                       int newEntry, 
+                                                 vector<int>& tempTriangle,
+                                                 vector<int>& tempTriangle2) {
+  tempTriangle[0] = currentTriangle[(triangleEdge+2)%3];
+  tempTriangle[1] = currentTriangle[triangleEdge];
+  tempTriangle[2] = newEntry;
+  
+  tempTriangle2[0] = currentTriangle[(triangleEdge+1)%3];
+  tempTriangle2[1] = currentTriangle[(triangleEdge+2)%3];
+  tempTriangle2[2] = newEntry;
+}
+
+/*****************************************************************************/
+/* create the unit ball in 3 dimensions                                      */
+/* it starts with a triangle and finds the minimum scl, i.e. pushes the ball */
+/* out (which creates 2 or 3 new triangles), and continues                   */
+/*****************************************************************************/
+void  ball_in_positive_orthant(vector<vector<string> >& chains, 
+                               vector<int>& weights, 
+                               int maxjun, 
+                               scallop_lp_solver solver, 
+                               int VERBOSE,
+                               vector<vector<rational> >& orthantVertices,
+                               vector<vector<int> >& orthantTriangles) {
+  int i,j;
+  
+  //first, make a flat list of all the words
+  vector<string> wordList(0);
+  for (i=0; i<chains.size(); i++) {
+    for (j=0; j<chains[i].size(); j++) {
+      wordList.push_back(chains[i][j]);
+    }
+  }
+  
+    vector<arc> arc_list(0);
+  vector<polygon> polygon_list(0);
+  
+  //generate the arcs!
+  generate_arcs(&arc_list, wordList, wordList.size());
+  int arc_list_length = arc_list.size();
+  
+  if(VERBOSE==1){
+    cout << "generated arcs\n";
+    if (VERBOSE >1) {
+      cout << arc_list_length << " arcs (start letter, end letter, start word, end word) \n";
+      for(i=0;i<arc_list_length;i++){
+	      cout << "arc " << i << " : ";
+	      cout << arc_list[i].first << " " << arc_list[i].last << " " << arc_list[i].first_word << " " << arc_list[i].last_word << "\n";
+  
+      }
+    }
+  };
+  
+  //generate the polygons!
+  generate_polygons(wordList, polygon_list, arc_list, maxjun); 
+  int polygon_list_length = polygon_list.size();
+  
+  if(VERBOSE==1){
+    cout << "generated polygons\n";
+    if (VERBOSE>1) {
+      cout << polygon_list_length << " polygons (cyclic list of arcs) \n";
+      for(i=0;i<polygon_list_length;i++){
+	      cout << "polygon " << i << " : ";
+	      for(j=0;j<polygon_list[i].size;j++){
+	        cout << polygon_list[i].arc[j] << " ";
+	      };
+	      cout << '\n';
+      }
+    }
+  }
+  
+  
+  //create the constraint matrix
+  RatMat* constraints = new RatMat[1];
+  vector<int> equalityType;
+  
+  create_constraint_matrix(chains, arc_list, polygon_list, weights, constraints,
+                                                                    equalityType);
+                                                                    
+  if (VERBOSE==1) {
+    //cout << "Constraint Matrix:\n";
+    //RatMat_print(constraints, 1);       
+  }                                           
+  
+  //pick the three basic points (1,0,0), (0,1,0), (0,0,1)
+  //and make them a triangle
+  vector<vector<rational> > vertices(3);
+  vector<vector<int> > triangleStack(1);
+  for (i=0; i<3; i++) {
+    vertices[i][0] = rational((i==0 ? 1 : 0), 1);
+    vertices[i][1] = rational((i==1 ? 1 : 0), 1);
+    vertices[i][2] = rational((i==2 ? 1 : 0), 1);
+  }
+  triangleStack[0][0] = 0;
+  triangleStack[0][1] = 1;
+  triangleStack[0][2] = 2;
+  
+  
+  //find their scls and scale
+  rational scl;
+  for (i=0; i<3; i++) {
+    scl = point_scl(chains, arc_list, polygon_list, weights, constraints, equalityType, points[i], solver, VERBOSE);
+    if (VERBOSE) {
+      cout << "Found scl of chain " << i << ": " << scl << "\n";
+    }
+    for (j=0; j<3; j++) {
+      points[i][j] = points[i][j]/scl;
+    }
+  }
+  
+  //create the (empty) final triangle list
+  vector<vector<int> > finalTriangles(0);
+  
+  //thus we now have three points on the scl ball; go into the main loop now  
+  vector<int> currentTriangle;
+  vector<int> tempTriangle;
+  vector<int> tempTriangle2;
+  vector<rational> newVertex;
+  int triangleEdge;
+  
+  while (triangleStack.size() > 0) {
+    //pop the first triangle off the triangle stack
+    currentTriangle = triangleStack.back();
+    triangleStack.pop_back();
+    
+    //determine if scl is linear over the triangle
+    //if min_scl... returns 1, then it is linear
+    if (1==min_scl_over_triangle(chains, arc_list, polygon_list, weights,
+                                                                 constraints,
+                                                                 equalityType,
+                                                                 vertices[currentTriangle[0]],
+                                                                 vertices[currentTriangle[1]],
+                                                                 vertices[currentTriangle[2]],
+                                                                 solver,
+                                                                 VERBOSE,
+                                                                 newVertex)){
+      //it's linear, so this triangle is good
+      finalTriangles.push_back(currentTriangle);
+    
+    } else {
+      //it's not linear over the triangle, so we have to add in either 2 or
+      //3 new triangles, depending on whether it's on a line
+      vertices.push_back(newVertex);
+      triangleEdge = which_triangle_edge(vertices[currentTriangle[0]],
+                                         vertices[currentTriangle[1]],
+                                         vertices[currentTriangle[2]],
+                                         newVertex);
+      if (triangleEdge == 3) {
+        //if which_edge gives 3, then it's in the interior
+        //so we need to push on the three new triangles
+        for (i=0; i<3; i++) {
+          tempTriangle[0] = currentTriangle[i];
+          tempTriangle[1] = currentTriangle[(i+1)%3];
+          tempTriangle[2] = vertices.size()-1;       // <-- we just pushed the new one on
+          triangleStack.push(tempTriangle);
+        }
+      } else {
+        //looks like we have a point on the edge.  We need to add two new 
+        //triangles, AND we need to go back and split every triangle containing
+        //the edge into two new triangles
+        //triangleEdge is the first index in currentTriangle of the edge on which
+        //the new vertex lies
+        split_triangle_edge(currentTriangle, triangleEdge, vertices.size()-1, 
+                                                           tempTriangle,
+                                                           tempTriangle2);
+        triangleStack.push_back(tempTriangle);
+        triangleStack.push_back(tempTriangle2);
+      }
+    }
+  }
+  
+  orthantVertices = vertices;
+  orthantTriangles = finalTriangles;
+      
+  delete[] constraints;
+  
+}
 
 
 /*****************************************************************************/

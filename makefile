@@ -1,6 +1,6 @@
 CCC=g++
 CC=gcc
-CFLAGS=-O3 #-g -Wall
+CFLAGS= -g -Wall
 LDFLAGS=-lglpk -lgmp
 all: scabble
 

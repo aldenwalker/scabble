@@ -559,15 +559,15 @@ vector<vector<rational> > ball_in_positive_quadrant(vector<vector<string> >& cha
     if (VERBOSE >1) {
       cout << arc_list_length << " arcs (start letter, end letter, start word, end word) \n";
       for(i=0;i<arc_list_length;i++){
-	cout << "arc " << i << " : ";
-	cout << arc_list[i].first << " " << arc_list[i].last << " " << arc_list[i].first_word << " " << arc_list[i].last_word << "\n";
+	      cout << "arc " << i << " : ";
+	      cout << arc_list[i].first << " " << arc_list[i].last << " " << arc_list[i].first_word << " " << arc_list[i].last_word << "\n";
   
       }
     }
   };
   
   //generate the polygons!
-  generate_polygons(wordList, polygon_list, arc_list, maxjun);  //the 2*rank used to be known as maxjun
+  generate_polygons(wordList, polygon_list, arc_list, maxjun); 
   int polygon_list_length = polygon_list.size();
   
   if(VERBOSE==1){
@@ -575,11 +575,11 @@ vector<vector<rational> > ball_in_positive_quadrant(vector<vector<string> >& cha
     if (VERBOSE>1) {
       cout << polygon_list_length << " polygons (cyclic list of arcs) \n";
       for(i=0;i<polygon_list_length;i++){
-	cout << "polygon " << i << " : ";
-	for(j=0;j<polygon_list[i].size;j++){
-	  cout << polygon_list[i].arc[j] << " ";
-	};
-	cout << '\n';
+	      cout << "polygon " << i << " : ";
+	      for(j=0;j<polygon_list[i].size;j++){
+	        cout << polygon_list[i].arc[j] << " ";
+	      };
+	      cout << '\n';
       }
     }
   }
@@ -791,7 +791,9 @@ void draw_ball(string fileName, vector<vector<string> >& chains,
 }
 
 
-
+/*****************************************************************************/
+/* create the unit ball in 2 dimensions                                      */
+/*****************************************************************************/
 void create_print_unit_ball(vector<vector<string> >& chains,
                             vector<int>& weights,
                             string fileName,
@@ -815,12 +817,19 @@ void create_print_unit_ball(vector<vector<string> >& chains,
     for (j=0; j<(int)chains[i].size(); j++) {
       if (i==1) {
         wordList.push_back(inverse(chains[i][j]));
+        chains[i][j] = inverse(chains[i][j]);
       } else {
         wordList.push_back(chains[i][j]);
       }
     }
   } 
   vector< vector<rational> > points2 = ball_in_positive_quadrant(chains, wordList, weights, maxjun, solver, VERBOSE);  
+
+  for (i=0; i<(int)chains.size(); i++) {
+    for (j=0; j<(int)chains[i].size(); j++) {
+      chains[i][j] = inverse(chains[i][j]);
+    }
+  }
 
   //collect all the points
   vector< vector<rational> > allPoints;
@@ -876,8 +885,78 @@ void create_print_unit_ball(vector<vector<string> >& chains,
   
 }
 
-
-
+/*****************************************************************************/
+/* create the unit ball in 3 dimensions!!                                    */
+/*****************************************************************************/
+void create_print_unit_ball_3D(vector<vector<string> >& chains,
+                              vector<int>& weights,
+                              string fileName,
+                              int maxjun, 
+                              scallop_lp_solver solver,
+                              int VERBOSE) {
+  //in 3 dimensions, we can't just list all the points in order, so we will 
+  //produce a list a points (vertices), plus a list of triples of indices, which
+  //will be the triangles in a triangulation of the polyhedron
+  
+  //we need to do all four top orthants separately; then we'll reflect them
+  //the chains to take the inverses will be the first two chains, and which 
+  //to invert will be given by the binary digits of "orthant"
+  //1 = make inverse
+  
+  vector<vector<vector<rational> > > orthantVertices(4); //these are the actual vertices
+  vector<vector<vector<int> > > orthantTriangles(4); //these are the triangles
+  
+  //it's orthantTriangles[i][j][k], i=which orthant, j=which triangle, k=index in triangle
+  
+  int orthant;
+  int i,j;
+  
+  for (orthant=0; orthant<4; orthant++) {
+    //invert as described above
+    for (i=0; i<2; i++) {
+      if ( (orthant>>i)&1 == 1 ) {
+        //invert this chain
+        for (j=0; j<chains[i].size(); j++) {
+          chains[i][j] = inverse(chains[i][j]);
+        }
+      }
+    }
+    //compute the orthant
+    ball_in_positive_orthant(chains, weights, maxjun, solver, VERBOSE,
+                             orthantVertices[orthant],
+                             orthantTriangles[orthant]);
+    //now fix the orthant vertices, and invert the chains back
+    //note we need to take the negative of the vertex coordinates which are
+    //highlighted 1 in "orthant"
+    for (i=0; i<2; i++) {
+      if ( (orthant>>i)&1 == 0) {
+        continue;
+      }
+      //invert the chain
+      for (j=0; j<chains[i].size(); j++) {
+        chains[i][j] = inverse(chains[i][j]);
+      }
+      //invert the vertices
+      for (j=0; j<orthantVertices[orthant].size(); j++) {
+        orthantVertices[orthant][j][i] *= -1;
+      }
+    }
+  }
+  
+  
+  //*******
+  //now build a big list of all the vertices and triangles -- note that
+  //we need to be careful about reindexing the vertices (change the labels 
+  //in the triangles)
+  
+  vector<vector<rational> > allVertices(0);
+  vector<vector<int> > allTriangles(0);
+  int currentOffset = 0;
+  
+  
+  
+  
+}
 
 int main(int argc, char* argv[]){
 
@@ -895,7 +974,7 @@ int main(int argc, char* argv[]){
 
   if(argc < 2 || strcmp(argv[1],"-h")==0){
     cout << "usage: scabble [-v] [-glpk] [-mn] fileName [i_1]w_1 [i_1]w_2 . . [i_n]w_n , [j_1]v_1 [j_1]v_2 . . [j_m]v_m  \n";
-    cout << "\t\tproduces the unit ball in the plane spanned by the chains, output to fileName.eps\n";
+    cout << "\t\tproduces the unit ball in the plane spanned by the chains, output to fileName\n";
     cout << "-mn overrides the max number of sides for the polygons\n";
     return(0);
   };
@@ -922,9 +1001,7 @@ int main(int argc, char* argv[]){
     }
     argc--;
   }
-        
   
-  drawFile = string(argv[1]) + ".eps";
 
 
   //NOTE: it would be really awesome if we knew how big to make the polygon
@@ -948,17 +1025,16 @@ int main(int argc, char* argv[]){
   //fflush(stdout);
 
   //probably unnecessary
-  chains.resize(2);
-  for (i=0; i<2; i++) {
-    chains[i].resize(0);
-  }
+  chains.resize(1);
+  chains[0].resize(0);
 
 
-  //preprocess the words to remove the weights
+  //preprocess the words to remove the weights,
+  //and add them to the chain lists
   int weightLen;
   int whichChain = 0;
   int wordInd;
-  for(i=chainsStart;i<argc;i++){    // or should that be WORDS?
+  for(i=chainsStart;i<argc;i++){    
     
     if (VERBOSE == 1) {
       cout << "word: " << argv[i] << "\n";
@@ -966,6 +1042,8 @@ int main(int argc, char* argv[]){
   
     if (string(argv[i]) == ",") {
       whichChain++;
+      chains.resize(chains.size()+1);
+      chains[whichChain].resize(0);
       continue;
     }
     
@@ -984,9 +1062,17 @@ int main(int argc, char* argv[]){
     }
     wordList[wordInd] = wordList[wordInd].substr(j,wordList[wordInd].length()-j);
     
+    //make sure the word is cyclically reduced
+    cyc_red(wordList[wordInd]);
+    
+    if (VERBOSE == 1) {
+      cout << "cyclically reduced word: " << wordList[wordInd] << "\n";
+    }
+    
     chains[whichChain].push_back(wordList[wordInd]);
-  };
+  }
   
+  drawFile = string(argv[1]);
   
   //find the rank (count the letters)
   for (i=0; i<(int)wordList.size(); i++) {
@@ -1012,6 +1098,8 @@ int main(int argc, char* argv[]){
   
   
   if (VERBOSE == 1) {
+    cout << "Number of chains: " << chains.size() << "\n";
+    
     cout << "Rank: " << lettersSeen.size() << "\n";
   
     cout << "chains:\n";
@@ -1038,8 +1126,13 @@ int main(int argc, char* argv[]){
   
   
   //create, draw the unit ball
-  create_print_unit_ball(chains, weights, drawFile, maxjun, solver, VERBOSE);
-  
+  if (chains.size() == 2) {
+    create_print_unit_ball(chains, weights, drawFile, maxjun, solver, VERBOSE);
+  } else if (chains.size() == 3) {
+    create_print_unit_ball_3D(chains, weights, drawFile, maxjun, solver, VERBOSE);
+  } else {
+    cout << "You have too many chains or something\n";
+  }
 
   
   return 0;

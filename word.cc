@@ -2,10 +2,6 @@
  * word.cc: library of functions on strings and         *
  * words in groups used by program free.cc              *
  *                                                      *
- *                                                      *
- * Author: Danny Calegari                               *
- *                                                      *
- * 5/2/2007                                             *
  ********************************************************/
 
 #include "word.h"
@@ -19,24 +15,9 @@ struct pair{
 };
 */
 
-void red(string& s) {			// reduce by cancelling adjacent inverse letters
-	int i,a,b;
-	i=0;
-	while(i<=(int) s.length()){
-		if(i>0){
-			a = (int) s[i-1];
-			b = (int) s[i];
-			if((32+a-b)%64==0){
-	//			cout << (*s) << " " << i << "\n";
-				s.erase(i-1,2);
-	//			cout << (*s) << "\n";
-				i=i-2;
-			};
-		};
-		i++;
-	};
-	return;
-};
+char swapCaseChar(char c) {
+  return (char)((int)c > 96 ? (int)c-32 : (int)c+32);
+}
 
 
 void swapCase(string& s) {
@@ -58,6 +39,36 @@ string inverse(string& s) {
   swapCase(ans);
   return ans;
 }
+
+void red(string& s) {			// reduce by cancelling adjacent inverse letters
+	int i,a,b;
+	i=0;
+	while(i<=(int) s.length()){
+		if(i>0){
+			a = (int) s[i-1];
+			b = (int) s[i];
+			if((32+a-b)%64==0){
+	//			cout << (*s) << " " << i << "\n";
+				s.erase(i-1,2);
+	//			cout << (*s) << "\n";
+				i=i-2;
+			};
+		};
+		i++;
+	};
+	return;
+};
+
+
+void cyc_red(string& s) {
+  while ( (s.size() > 0) && (s[0] == swapCaseChar(s[s.size()-1])) ) {
+    s.erase(0,1);
+    s.erase(s.size()-1, 1);
+  }
+}
+
+
+
 
 string multiply_words(string& s1, string& s2) {
   string ans = s1+s2;

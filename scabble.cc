@@ -569,6 +569,7 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
   vector<rational> tempVector(numChains);
   rational parallelValueLower;
   rational parallelValueUpper;
+  rational temp;
   
   for (i=0; i<numChains; i++) {
     //change the number of rows
@@ -586,6 +587,14 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
       parallelVector = cross_product(tempVector, hyperplaneNormal);
       parallelValueLower = dot_product(parallelVector, vertices[1]);
       parallelValueUpper = dot_product(parallelVector, vertices[0]);
+    }
+    //there are some issues with orientation so that the lower and upper bounds
+    //are sometimes swapped -- instead of doing it right, we'll hack it
+    //I think this might be really ok, though
+    if (parallelValueUpper < parallelValueLower) {
+      temp = parallelValueLower;
+      parallelValueLower = parallelValueUpper;
+      parallelValueUpper = temp;
     }
     
     if (VERBOSE==1) {
@@ -681,7 +690,9 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
   }
   
   if (VERBOSE==1)
-    cout << "new point with scl = 1 at: " << newVertex[0] << ", " << newVertex[1] << "\n";
+    cout << "new point with scl = 1 at: " << newVertex[0] << ", " 
+                                          << newVertex[1] <<", " 
+                                          << newVertex[2] <<  "\n";
   
   //remove the new rows that we added
   RatMat_change_num_rows(constraints, constraints->nR-(2*numChains+1));
@@ -1189,11 +1200,17 @@ void split_triangle_edge(vector<int>& currentTriangle, int triangleEdge,
 
 /*****************************************************************************/
 /* determine if a point is in an edge of a triangle or in the interior       */
+/* note *projectively* on the edge or interior                               */
 /*****************************************************************************/
 int which_triangle_edge(vector<rational> v1,
                         vector<rational> v2,
                         vector<rational> v3,
                         vector<rational> newPoint) {
+  cout << "finding where " << newPoint[0] << ", " << newPoint[1] << ", " << newPoint[2] << "\n";
+  cout << "is in the triangle:\n";
+  cout << v1[0] << ", " << v1[1] << ", " << v1[2] << "\n";
+  cout << v2[0] << ", " << v3[1] << ", " << v2[2] << "\n";
+  cout << v3[0] << ", " << v2[1] << ", " << v3[2] << "\n";
   //it's on an edge if the new point minus vi scales to the other vertex
   int i;
   vector<rational> tempVector1(3);
@@ -1337,9 +1354,9 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
   //thus we now have three points on the scl ball; go into the main loop now  
   vector<int> currentTriangle;
   vector<vector<rational> > currentTriangleVertices(3);
-  vector<int> tempTriangle;
-  vector<int> tempTriangle2;
-  vector<rational> newVertex;
+  vector<int> tempTriangle(3);
+  vector<int> tempTriangle2(3);
+  vector<rational> newVertex(3);
   int triangleEdge;
   
   while (triangleStack.size() > 0) {

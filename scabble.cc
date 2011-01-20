@@ -473,7 +473,7 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
                           vector<vector<rational> >& vertices,
                           scallop_lp_solver solver,
                           int VERBOSE,
-                          vector<rational> newVertex) {
+                          vector<rational>& newVertex) {
   int i,j,k,l;
   int numChains = chains.size(); //note this is also the dimension of the space
   mpq_t entry;
@@ -505,7 +505,7 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
   //we get n-1 vectors -- vertex 0 -> 1 and 0 -> 2, etc
   vector<vector<rational> > spanningVectors(numChains-1);
   for (i=1; i<numChains; i++) {
-    spanningVectors[i].resize(numChains);
+    spanningVectors[i-1].resize(numChains);
     for (j=0; j<numChains; j++) {
       spanningVectors[i-1][j] = vertices[i][j] - vertices[0][j];
     }
@@ -1176,6 +1176,8 @@ void split_triangle_edge(vector<int>& currentTriangle, int triangleEdge,
                                                        int newEntry, 
                                                  vector<int>& tempTriangle,
                                                  vector<int>& tempTriangle2) {
+  tempTriangle.resize(3);
+  tempTriangle2.resize(3);
   tempTriangle[0] = currentTriangle[(triangleEdge+2)%3];
   tempTriangle[1] = currentTriangle[triangleEdge];
   tempTriangle[2] = newEntry;
@@ -1184,6 +1186,7 @@ void split_triangle_edge(vector<int>& currentTriangle, int triangleEdge,
   tempTriangle2[1] = currentTriangle[(triangleEdge+2)%3];
   tempTriangle2[2] = newEntry;
 }
+
 /*****************************************************************************/
 /* determine if a point is in an edge of a triangle or in the interior       */
 /*****************************************************************************/
@@ -1191,7 +1194,42 @@ int which_triangle_edge(vector<rational> v1,
                         vector<rational> v2,
                         vector<rational> v3,
                         vector<rational> newPoint) {
-  return 0;
+  //it's on an edge if the new point minus vi scales to the other vertex
+  int i;
+  vector<rational> tempVector1(3);
+  vector<rational> tempVector2(3);
+  vector<rational> cp(3);
+  for (i=0; i<3; i++) {
+    tempVector1[i] = newPoint[i] - v1[i];
+    tempVector2[i] = v2[i] - newPoint[i];
+  }
+  //they are linearly dependent iff their cross product is zero
+  cp = cross_product(tempVector1, tempVector2);
+  if (cp[0] == rational(0,1) && cp[1] == rational(0,1) && cp[2] == rational(0,1)) {
+    return 0;
+  }
+  
+  for (i=0; i<3; i++) {
+    tempVector1[i] = newPoint[i] - v2[i];
+    tempVector2[i] = v3[i] - newPoint[i];
+  }
+  //they are linearly dependent iff their cross product is zero
+  cp = cross_product(tempVector1, tempVector2);
+  if (cp[0] == rational(0,1) && cp[1] == rational(0,1) && cp[2] == rational(0,1)) {
+    return 1;
+  }
+  
+  for (i=0; i<3; i++) {
+    tempVector1[i] = newPoint[i] - v3[i];
+    tempVector2[i] = v1[i] - newPoint[i];
+  }
+  //they are linearly dependent iff their cross product is zero
+  cp = cross_product(tempVector1, tempVector2);
+  if (cp[0] == rational(0,1) && cp[1] == rational(0,1) && cp[2] == rational(0,1)) {
+    return 2;
+  }
+  
+  return 3;
 }
 /*****************************************************************************/
 /* create the unit ball in 3 dimensions                                      */
@@ -1270,10 +1308,12 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
   vector<vector<rational> > vertices(3);
   vector<vector<int> > triangleStack(1);
   for (i=0; i<3; i++) {
+    vertices[i].resize(3);
     vertices[i][0] = rational((i==0 ? 1 : 0), 1);
     vertices[i][1] = rational((i==1 ? 1 : 0), 1);
     vertices[i][2] = rational((i==2 ? 1 : 0), 1);
   }
+  triangleStack[0].resize(3);
   triangleStack[0][0] = 0;
   triangleStack[0][1] = 1;
   triangleStack[0][2] = 2;
@@ -1435,6 +1475,10 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
     }
   }
   
+  if (VERBOSE==1) {
+    cout << "I found " << finalTriangles.size() << " triangles\n";
+  }
+  
   orthantVertices = vertices;
   orthantTriangles = finalTriangles;
       
@@ -1480,8 +1524,8 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   outfile << "\tface_indices {\n";
   outfile << "\t\t" << allTriangles.size() << ",\n";
   for (i=0; i<(int)allTriangles.size(); i++) {
-    outfile << "\t\t<" << allTriangles[i][0] << ","
-                       << allTriangles[i][1] << ","
+    outfile << "\t\t<" << allTriangles[i][0] << "," 
+                       << allTriangles[i][1] << "," 
                        << allTriangles[i][2] << ">,\n";
   }
   outfile << "\t}\n";
@@ -1563,6 +1607,9 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
         orthantVertices[orthant][j][i] = orthantVertices[orthant][j][i] * rational(-1,1);
       }
     }
+    if (VERBOSE==1) {
+      cout << "I got " << orthantTriangles[orthant].size() << " new triangles\n";
+    }
   }
   
   
@@ -1584,8 +1631,9 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
       for (j=0; j<3; j++) {
         tempTriangle[j] = orthantTriangles[orthant][i][j] + currentOffset;
       }
+      allTriangles.push_back(tempTriangle);
     }
-    currentOffset += allVertices.size();
+    currentOffset = allVertices.size();
   }
   
   //now reflect the whole thing through the origin

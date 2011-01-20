@@ -635,6 +635,17 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
     equalityType.push_back(-1);
   }
   
+  /*
+  if (VERBOSE==1) {
+    cout << "constraints:\n";
+    RatMat_print(constraints,1);
+    cout << "equalityType:\n";
+    for (i=0; i<constraints->nR; i++) {
+      cout << equalityType[i] << " ";
+    }
+    cout << "\n";
+  }
+  */
   
   /**************  linear programming  ***********************/
   vector<rational> solutionVector(constraints->nC-1, rational());
@@ -1209,41 +1220,24 @@ int which_triangle_edge(vector<rational> v1,
   cout << "finding where " << newPoint[0] << ", " << newPoint[1] << ", " << newPoint[2] << "\n";
   cout << "is in the triangle:\n";
   cout << v1[0] << ", " << v1[1] << ", " << v1[2] << "\n";
-  cout << v2[0] << ", " << v3[1] << ", " << v2[2] << "\n";
-  cout << v3[0] << ", " << v2[1] << ", " << v3[2] << "\n";
-  //it's on an edge if the new point minus vi scales to the other vertex
+  cout << v2[0] << ", " << v2[1] << ", " << v2[2] << "\n";
+  cout << v3[0] << ", " << v3[1] << ", " << v3[2] << "\n";
+
   int i;
   vector<rational> tempVector1(3);
   vector<rational> tempVector2(3);
   vector<rational> cp(3);
-  for (i=0; i<3; i++) {
-    tempVector1[i] = newPoint[i] - v1[i];
-    tempVector2[i] = v2[i] - newPoint[i];
-  }
-  //they are linearly dependent iff their cross product is zero
-  cp = cross_product(tempVector1, tempVector2);
-  if (cp[0] == rational(0,1) && cp[1] == rational(0,1) && cp[2] == rational(0,1)) {
-    return 0;
-  }
+  rational dp;
   
+  //it is projectively in a side if the dot prod with the cross prod is 0
   for (i=0; i<3; i++) {
-    tempVector1[i] = newPoint[i] - v2[i];
-    tempVector2[i] = v3[i] - newPoint[i];
-  }
-  //they are linearly dependent iff their cross product is zero
-  cp = cross_product(tempVector1, tempVector2);
-  if (cp[0] == rational(0,1) && cp[1] == rational(0,1) && cp[2] == rational(0,1)) {
-    return 1;
-  }
-  
-  for (i=0; i<3; i++) {
-    tempVector1[i] = newPoint[i] - v3[i];
-    tempVector2[i] = v1[i] - newPoint[i];
-  }
-  //they are linearly dependent iff their cross product is zero
-  cp = cross_product(tempVector1, tempVector2);
-  if (cp[0] == rational(0,1) && cp[1] == rational(0,1) && cp[2] == rational(0,1)) {
-    return 2;
+    cp = (i==0 ? cross_product(v1, v2) :
+         (i==1 ? cross_product(v2, v3) :
+         (i==2 ? cross_product(v3, v1) : cross_product(v1,v1) ) ) );
+    dp = dot_product(newPoint, cp);
+    if ( dp == rational(0,1)) {
+      return i;
+    }
   }
   
   return 3;
@@ -1278,6 +1272,14 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
   int arc_list_length = arc_list.size();
   
   if(VERBOSE==1){
+    cout << "***************\n";
+    cout << "generating ball in the positive orthant spanned by:\n";
+    for (i=0; i<(int)chains.size(); i++) {
+      for (j=0; j<(int)chains[i].size(); j++) {
+        cout << chains[i][j] << " ";
+      }
+      cout << "\n";
+    }
     cout << "generated arcs\n";
     if (VERBOSE >1) {
       cout << arc_list_length << " arcs (start letter, end letter, start word, end word) \n";
@@ -1520,6 +1522,7 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   outfile.open(povrayFileName.c_str(), fstream::out);
   
   //first, the preamble
+  outfile << "#include \"colors.inc\"\n";
   outfile << "background { color Cyan }\n";
   outfile << "camera {\n";
   outfile << "\tlocation <5, 5, -8>\n";

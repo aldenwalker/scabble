@@ -423,23 +423,117 @@ vector<rational> min_point_on_line(vector<vector<string> >&chains,
 
 
 
+/*****************************************************************************/
+/* the cross product of two 3d vectors                                       */
+/*****************************************************************************/
+vector<rational> cross_product(vector<rational>& v1, vector<rational>& v2) {
+  vector<rational> ans(3)
+  ans[0] = v1[1]*v2[2] - v1[2]*v2[1];
+  ans[1] = v1[2]*v2[0] - v1[0]*v2[2];
+  ans[2] = v1[0]*v2[1] - v1[1]*v2[0];
+  return ans;
+}
 
-
-
+/*****************************************************************************/
+/* the dot   product of two    vectors                                       */
+/*****************************************************************************/
+rational dot_product(vector<rational>& v1, vector<rational>& v2) {
+  rational ans = rational(0,1);
+  int i;
+  for (i=0; i<v1.size(); i++) {
+    ans += v1[i]*v2[i];
+  }
+  return ans;
+}
 
 /*****************************************************************************/
 /* this generalizes the method above to arbitrary dimensions                 */
 /* we've already restricted to the subspace spanned by the chains -- here    */
-/* we expect n+1
-void min_scl_over_simplex(chains, arc_list, polygon_list, weights,
-                                                                 constraints,
-                                                                 equalityType,
-                                                                 vertices[currentTriangle[0]],
-                                                                 vertices[currentTriangle[1]],
-                                                                 vertices[currentTriangle[2]],
-                                                                 solver,
-                                                                 VERBOSE,
-                                                                 newVertex)
+/* we expect n vectors of dimension n                                        */
+/*                                                                           */
+/* NOTE: currently it's only 3d because it's easy to find the nullspace      */
+/* precondition: all the vertices have scl = 1                               */
+/*****************************************************************************/
+void min_scl_over_simplex(vector<vector<string> >& chains, 
+                          vector<arc>& arc_list, 
+                          vector<polygon>& polygon_list, 
+                          vector<int>& weights,
+                          RatMat* constraints,
+                          vector<int>& equalityType,
+                          vector<vector<rational> >& vertices,
+                          scallop_lp_solver solver,
+                          int VERBOSE,
+                          vector<rational> newVertex) {
+  int i,j,k;
+  int numChains = chains.size(); //note this is also the dimension of the space
+  mpq_t entry;
+  mpq_init(entry);
+  
+  if (VERBOSE==1) {
+    cout << "I'm finding the min scl over the simplex with vertices:\n";
+    for (i=0; i<numChains; i++) {
+      for (j=0; j<numChains; j++) {
+        cout << vertices[i][j] << ", ";
+      }
+      cout << "\n";
+    }
+  }
+  
+  
+  //so we now have some new constraints:
+  //the hyperplane constraints that normalVector.x == hyperplaneValue
+  //the inequality constraints that cut out the triangle
+  
+  
+  /************* the hyperplane constraint *******************************/
+  
+  RatMat_change_num_rows(constraints, constraints->nR+1);
+  
+  //we get n-1 vectors -- vertex 0 -> 1 and 0 -> 2, etc
+  vector<vector<rational> > spanningVectors(numChains-1);
+  for (i=1; i<numChains; i++) {
+    for (j=0; j<numChains; j++) {
+      spanningVectors[i-1][j] = vertices[i][j] - vertices[0][j];
+    }
+  }
+  
+  //this is the part which requires 3d
+  vector<rational> normalVector = cross_product(spanningVectors[0],
+                                                spanningVectors[1]);
+  rational hyperplaneValue = dot_product(normalVector, vertices[0]);  //all the vertices have the same dot prod
+  
+  for (i=0; i<(int)polygon_list.size(); i++) {  //for each poly
+    coef = rational(0,1);                      //this will be the coefficient
+    for (j=0; j<polygon_list[i].size; j++) {  //go through the edges
+      firstWordNumber = 0;                    //this is the word index of the first word in the chain
+      for (k=0; k<numChains; k++) {
+        if (arc_list[polygon_list[i].arc[j]].first_word == firstWordNumber &&
+            arc_list[polygon_list[i].arc[j]].first == 0) {                        //if we're looking at the first word in a chain, first letter
+          coef = (coef) +  (hyperplaneNormal[k]/weights[firstWordNumber]) ;
+        }
+        firstWordNumber+=chains[k].size();
+      }
+    }
+    coef.get_mpq(entry);
+    RatMat_set(constraints, constraints->nR-1, i, entry);
+  }
+  hyperplaneValue.get_mpq(entry);
+  RatMat_set(constraints, constraints->nR-1, constraints->nC-1, entry);
+  equalityType.push_back(0);
+  
+  
+  /************ the inequality constraints ******************************/
+  /*  here what we do is to find a vector which is perpendicular to  each face
+      of the simplex (note there is a degree of freedom here) -- in order to 
+      to this, we take all the spanning vectors, take one out, and add in the 
+      hyperplane normal, and find the nullspace.  this leaves one guy we still need
+      --we redefine the spanning vectors from vertex, and take replace the first
+      with the hyperplane normal, and we're done
+  */
+  
+  
+  
+}
 
 
 
@@ -821,9 +915,7 @@ void draw_ball(string fname, vector<vector<string> >& chains,
 }
 
 
-    ball_in_positive_orthant(chains, weights, maxjun, solver, VERBOSE,
-                             orthantVertices[orthant],
-                             orthantTriangles[orthant]);
+ 
 
 /*****************************************************************************/
 /* create the unit ball in 2 dimensions                                      */
@@ -1040,6 +1132,7 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
   
   //thus we now have three points on the scl ball; go into the main loop now  
   vector<int> currentTriangle;
+  vector<vector<rational> > currentTriangleVertices(3);
   vector<int> tempTriangle;
   vector<int> tempTriangle2;
   vector<rational> newVertex;
@@ -1049,15 +1142,16 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
     //pop the first triangle off the triangle stack
     currentTriangle = triangleStack.back();
     triangleStack.pop_back();
+    for (i=0; i<3; i++) {
+      currentTriangleVertices[i] = vertices[currentTriangle[i]];
+    }
     
     //determine if scl is linear over the triangle
     //if min_scl... returns 1, then it is linear
-    if (1==min_scl_over_triangle(chains, arc_list, polygon_list, weights,
+    if (1==min_scl_over_simplex(chains, arc_list, polygon_list, weights,
                                                                  constraints,
                                                                  equalityType,
-                                                                 vertices[currentTriangle[0]],
-                                                                 vertices[currentTriangle[1]],
-                                                                 vertices[currentTriangle[2]],
+                                                                 currentTriangleVertices,
                                                                  solver,
                                                                  VERBOSE,
                                                                  newVertex)){

@@ -212,7 +212,7 @@ rational point_scl(vector<vector<string> >&chains,
                                 constraints->nC-1,
                                 point[j].n(),
                                 point[j].d());
-    equalityType.push_back(0:
+    equalityType.push_back(0);
   }
                                
   
@@ -427,10 +427,20 @@ vector<rational> min_point_on_line(vector<vector<string> >&chains,
 /* the cross product of two 3d vectors                                       */
 /*****************************************************************************/
 vector<rational> cross_product(vector<rational>& v1, vector<rational>& v2) {
-  vector<rational> ans(3)
-  ans[0] = v1[1]*v2[2] - v1[2]*v2[1];
-  ans[1] = v1[2]*v2[0] - v1[0]*v2[2];
-  ans[2] = v1[0]*v2[1] - v1[1]*v2[0];
+  vector<rational> ans(3);
+  rational temp;
+  ans[0] = v1[1]*v2[2];
+  temp = v1[2]*v2[1];
+  ans[0] = ans[0] - temp;
+  
+  ans[1] = v1[2]*v2[0];
+  temp = v1[0]*v2[2];
+  ans[1] = ans[1] - temp;
+  
+  ans[2] = v1[0]*v2[1];
+  temp = v1[1]*v2[0];
+  ans[2] = ans[2] - temp;
+  
   return ans;
 }
 
@@ -440,8 +450,8 @@ vector<rational> cross_product(vector<rational>& v1, vector<rational>& v2) {
 rational dot_product(vector<rational>& v1, vector<rational>& v2) {
   rational ans = rational(0,1);
   int i;
-  for (i=0; i<v1.size(); i++) {
-    ans += v1[i]*v2[i];
+  for (i=0; i<(int)v1.size(); i++) {
+    ans = ans + (v1[i]*v2[i]);
   }
   return ans;
 }
@@ -454,7 +464,7 @@ rational dot_product(vector<rational>& v1, vector<rational>& v2) {
 /* NOTE: currently it's only 3d because it's easy to find the nullspace      */
 /* precondition: all the vertices have scl = 1                               */
 /*****************************************************************************/
-void min_scl_over_simplex(vector<vector<string> >& chains, 
+int min_scl_over_simplex(vector<vector<string> >& chains, 
                           vector<arc>& arc_list, 
                           vector<polygon>& polygon_list, 
                           vector<int>& weights,
@@ -464,7 +474,7 @@ void min_scl_over_simplex(vector<vector<string> >& chains,
                           scallop_lp_solver solver,
                           int VERBOSE,
                           vector<rational> newVertex) {
-  int i,j,k;
+  int i,j,k,l;
   int numChains = chains.size(); //note this is also the dimension of the space
   mpq_t entry;
   mpq_init(entry);
@@ -486,21 +496,45 @@ void min_scl_over_simplex(vector<vector<string> >& chains,
   
   
   /************* the hyperplane constraint *******************************/
+  rational coef;
+  int firstWordNumber;
+  
   
   RatMat_change_num_rows(constraints, constraints->nR+1);
   
   //we get n-1 vectors -- vertex 0 -> 1 and 0 -> 2, etc
   vector<vector<rational> > spanningVectors(numChains-1);
   for (i=1; i<numChains; i++) {
+    spanningVectors[i].resize(numChains);
     for (j=0; j<numChains; j++) {
       spanningVectors[i-1][j] = vertices[i][j] - vertices[0][j];
     }
   }
   
+  if (VERBOSE==1) {
+    cout << "The spanning vectors are:\n";
+    for (i=0; i<numChains-1; i++) {
+      for (j=0; j<numChains; j++) {
+        cout << spanningVectors[i][j] << ", ";
+      }
+      cout << "\n";
+    }
+  }
+  
   //this is the part which requires 3d
-  vector<rational> normalVector = cross_product(spanningVectors[0],
+  vector<rational> hyperplaneNormal = cross_product(spanningVectors[0],
                                                 spanningVectors[1]);
-  rational hyperplaneValue = dot_product(normalVector, vertices[0]);  //all the vertices have the same dot prod
+  rational hyperplaneValue = dot_product(hyperplaneNormal, vertices[0]);  //all the vertices have the same dot prod
+  
+  if (VERBOSE==1) {
+    cout << "The normal vector is: \n";
+    for (i=0; i<numChains; i++) {
+      cout << hyperplaneNormal[i] << ", ";
+    }
+    cout << "\n";
+    cout << "With hyperplane value " << hyperplaneValue << "\n";
+    
+  }
   
   for (i=0; i<(int)polygon_list.size(); i++) {  //for each poly
     coef = rational(0,1);                      //this will be the coefficient
@@ -527,12 +561,134 @@ void min_scl_over_simplex(vector<vector<string> >& chains,
       of the simplex (note there is a degree of freedom here) -- in order to 
       to this, we take all the spanning vectors, take one out, and add in the 
       hyperplane normal, and find the nullspace.  this leaves one guy we still need
-      --we redefine the spanning vectors from vertex, and take replace the first
-      with the hyperplane normal, and we're done
+      -- we just use a temporary vector
   */
   
+  //down to 3d
+  vector<rational> parallelVector(numChains);
+  vector<rational> tempVector(numChains);
+  rational parallelValueLower;
+  rational parallelValueUpper;
+  
+  for (i=0; i<numChains; i++) {
+    //change the number of rows
+    //I am aware this is not the best way to realloc
+    RatMat_change_num_rows(constraints, constraints->nR+2);
+  
+    if (i<numChains-1) {
+      parallelVector = cross_product(spanningVectors[i], hyperplaneNormal);
+      parallelValueLower = dot_product(parallelVector, vertices[0]);
+      parallelValueUpper = dot_product(parallelVector, vertices[3-(i+1)]);
+    } else {
+      for (j=0; j<numChains; j++) {
+        tempVector[j] = vertices[2][j] - vertices[1][j];
+      }
+      parallelVector = cross_product(tempVector, hyperplaneNormal);
+      parallelValueLower = dot_product(parallelVector, vertices[1]);
+      parallelValueUpper = dot_product(parallelVector, vertices[0]);
+    }
+    
+    if (VERBOSE==1) {
+      cout << "Parallel vector: ";
+      for (j=0; j<numChains; j++) {
+        cout << parallelVector[j] << ", ";
+      }
+      cout << "\n";
+      cout << "With bounds " << parallelValueLower << " and " << parallelValueUpper << "\n";
+    }
+    
+    //now we have the parallelvector (which is the normal to our cutting plane)
+    //and the bounds.  For each of these, we get two new rows
+    
+    for (j=0; j<(int)polygon_list.size(); j++) {
+      coef = rational(0,1);                      //this will be the coefficient
+      for (k=0; k<(int)polygon_list[j].size; k++) {  //go through the edges
+        firstWordNumber = 0;                    //this is the word index of the first word in the chain
+        for (l=0; l<numChains; l++) {
+          if (arc_list[polygon_list[j].arc[k]].first_word == firstWordNumber &&
+              arc_list[polygon_list[j].arc[k]].first == 0) {                        //if we're looking at the first word in a chain, first letter
+            coef = coef +  (parallelVector[l]/weights[firstWordNumber]) ;
+          }
+          firstWordNumber+=chains[l].size();
+        }
+      }
+      coef.get_mpq(entry);
+      RatMat_set(constraints, constraints->nR-2, j, entry);
+      (-coef).get_mpq(entry);
+      RatMat_set(constraints, constraints->nR-1, j, entry);
+    }
+    //set the RHS
+    parallelValueUpper.get_mpq(entry);
+    RatMat_set(constraints, constraints->nR-2, constraints->nC-1, entry); //this is x <= b
+    (-parallelValueLower).get_mpq(entry);
+    RatMat_set(constraints, constraints->nR-1, constraints->nC-1, entry); //this is -x <= -b
+    equalityType.push_back(-1);
+    equalityType.push_back(-1);
+  }
   
   
+  /**************  linear programming  ***********************/
+  vector<rational> solutionVector(constraints->nC-1, rational());
+  rational scl;
+  
+  if (VERBOSE==1)
+    cout << "About to do linear programming\n";
+  
+  linear_program_from_ratmat( polygon_list, 
+                              solutionVector, 
+                              scl, 
+                              constraints, 
+                              equalityType, 
+                              solver, 
+                              VERBOSE ) ;
+  
+  if (VERBOSE==1)
+    cout << "Done -- got scl = " << scl.get_d() << " = " << scl << "\n";
+  
+  /************ reading solution vector ************************/
+  newVertex.resize(numChains); //this is the new point in the span of the chains
+  for (i=0; i<numChains; i++) {
+    newVertex[i] = rational(0,1);
+  }
+  
+  if (scl == rational(1,1)) { //if scl=1, return 1 to say it's linear
+    if (VERBOSE==1)
+      cout << "scl is 1, so I'm just going to bail out here\n";
+    RatMat_change_num_rows(constraints, constraints->nR-(2*numChains+1));
+    equalityType.resize(constraints->nR);
+    return 1;
+  } else {
+
+    //we must apply the delta function to get the point in g,h space
+    for (i=0; i<(int)polygon_list.size(); i++) {  //for each poly
+      for (j=0; j<polygon_list[i].size; j++) {  //go through the edges
+        firstWordNumber = 0;                    //this is the word index of the first word in the chain
+        for (k=0; k<numChains; k++) {
+          if (arc_list[polygon_list[i].arc[j]].first_word == firstWordNumber &&
+              arc_list[polygon_list[i].arc[j]].first == 0) {                        //if we're looking at the first word in a chain, first letter
+            newVertex[k] = newVertex[k] + solutionVector[i]/weights[firstWordNumber];  //add this many copies of the chain
+          }
+          firstWordNumber+=chains[k].size();
+        }
+      }
+    }
+
+    //scale it so that the returned point has scl = 1
+    for (i=0; i<numChains; i++) {
+      newVertex[i] = newVertex[i] / scl;
+    }
+    
+  }
+  
+  if (VERBOSE==1)
+    cout << "new point with scl = 1 at: " << newVertex[0] << ", " << newVertex[1] << "\n";
+  
+  //remove the new rows that we added
+  RatMat_change_num_rows(constraints, constraints->nR-(2*numChains+1));
+  equalityType.resize(constraints->nR);
+  
+  //recall that newVertex was called by reference, so we're returning it
+  return 0;
 }
 
 
@@ -1028,7 +1184,15 @@ void split_triangle_edge(vector<int>& currentTriangle, int triangleEdge,
   tempTriangle2[1] = currentTriangle[(triangleEdge+2)%3];
   tempTriangle2[2] = newEntry;
 }
-
+/*****************************************************************************/
+/* determine if a point is in an edge of a triangle or in the interior       */
+/*****************************************************************************/
+int which_triangle_edge(vector<rational> v1,
+                        vector<rational> v2,
+                        vector<rational> v3,
+                        vector<rational> newPoint) {
+  return 0;
+}
 /*****************************************************************************/
 /* create the unit ball in 3 dimensions                                      */
 /* it starts with a triangle and finds the minimum scl, i.e. pushes the ball */
@@ -1041,17 +1205,17 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
                                int VERBOSE,
                                vector<vector<rational> >& orthantVertices,
                                vector<vector<int> >& orthantTriangles) {
-  int i,j;
+  int i,j,k;
   
   //first, make a flat list of all the words
   vector<string> wordList(0);
-  for (i=0; i<chains.size(); i++) {
-    for (j=0; j<chains[i].size(); j++) {
+  for (i=0; i<(int)chains.size(); i++) {
+    for (j=0; j<(int)chains[i].size(); j++) {
       wordList.push_back(chains[i][j]);
     }
   }
   
-    vector<arc> arc_list(0);
+  vector<arc> arc_list(0);
   vector<polygon> polygon_list(0);
   
   //generate the arcs!
@@ -1118,12 +1282,12 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
   //find their scls and scale
   rational scl;
   for (i=0; i<3; i++) {
-    scl = point_scl(chains, arc_list, polygon_list, weights, constraints, equalityType, points[i], solver, VERBOSE);
+    scl = point_scl(chains, arc_list, polygon_list, weights, constraints, equalityType, vertices[i], solver, VERBOSE);
     if (VERBOSE) {
       cout << "Found scl of chain " << i << ": " << scl << "\n";
     }
     for (j=0; j<3; j++) {
-      points[i][j] = points[i][j]/scl;
+      vertices[i][j] = vertices[i][j]/scl;
     }
   }
   
@@ -1139,6 +1303,26 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
   int triangleEdge;
   
   while (triangleStack.size() > 0) {
+  
+    if (VERBOSE==1) {
+      cout << "Current triangle stack:\n";
+      for (i=0; i<(int)triangleStack.size(); i++) {
+        cout << "[";
+        for (j=0; j<3; j++) {
+          cout << triangleStack[i][j] << ", ";
+        }
+        cout << "] = ";
+        for (j=0; j<3; j++) {
+          cout << "(";
+          for (k=0; k<3; k++) {
+            cout << vertices[triangleStack[i][j]][k] << ", ";
+          }
+          cout << "), ";
+        }
+        cout << "\n";
+      }
+    }
+          
     //pop the first triangle off the triangle stack
     currentTriangle = triangleStack.back();
     triangleStack.pop_back();
@@ -1156,24 +1340,44 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
                                                                  VERBOSE,
                                                                  newVertex)){
       //it's linear, so this triangle is good
+      if (VERBOSE==1)
+        cout << "I decided this triangle is linear, so it's a good triangle\n";
+        
       finalTriangles.push_back(currentTriangle);
     
     } else {
       //it's not linear over the triangle, so we have to add in either 2 or
       //3 new triangles, depending on whether it's on a line
       vertices.push_back(newVertex);
+      if (VERBOSE==1) {
+        cout << "Added new vertex number " << vertices.size()-1 << ": ";
+        for (i=0; i<3; i++) {
+          cout << vertices[vertices.size()-1][i] << ", ";
+        }
+        cout << "\n";
+      }
       triangleEdge = which_triangle_edge(vertices[currentTriangle[0]],
                                          vertices[currentTriangle[1]],
                                          vertices[currentTriangle[2]],
                                          newVertex);
+      if (VERBOSE==1) {
+        cout << "got the new point: \n";
+        for (i=0; i<3; i++) {
+          cout << newVertex[i] << ", ";
+        }
+        cout << "\n";
+        cout << "Which is in edge (3=interior): " << triangleEdge << "\n";
+      }
       if (triangleEdge == 3) {
         //if which_edge gives 3, then it's in the interior
         //so we need to push on the three new triangles
+        if (VERBOSE==1)
+          cout << "The new point is in the interior\n";
         for (i=0; i<3; i++) {
           tempTriangle[0] = currentTriangle[i];
           tempTriangle[1] = currentTriangle[(i+1)%3];
           tempTriangle[2] = vertices.size()-1;       // <-- we just pushed the new one on
-          triangleStack.push(tempTriangle);
+          triangleStack.push_back(tempTriangle);
         }
       } else {
         //looks like we have a point on the edge.  We need to add two new 
@@ -1181,11 +1385,52 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
         //the edge into two new triangles
         //triangleEdge is the first index in currentTriangle of the edge on which
         //the new vertex lies
+        cout << "The new vertex splits an edge\n";  
         split_triangle_edge(currentTriangle, triangleEdge, vertices.size()-1, 
                                                            tempTriangle,
                                                            tempTriangle2);
         triangleStack.push_back(tempTriangle);
-        triangleStack.push_back(tempTriangle2);
+        triangleStack.push_back(tempTriangle2);      
+        cout << "This triangle gets split into:\n";
+        for (i=0; i<3; i++) {
+          cout << tempTriangle[i] << ", ";
+        }
+        cout << "\nand:\n";
+        for (i=0; i<3; i++) {
+          cout << tempTriangle2[i] << ", ";
+        }
+        
+        //now we have to go through and split all triangles (there can be at 
+        //most 1?) which have this edge
+        for (i=0; i<(int)triangleStack.size(); i++) {
+          for (j=0; j<3; j++) {
+            if (triangleStack[i][j] == currentTriangle[triangleEdge]
+                && triangleStack[i][(j+1)%3] == currentTriangle[(triangleEdge+1)%3]) {
+              split_triangle_edge(triangleStack[i], j, vertices.size()-1, 
+                                                           tempTriangle,
+                                                           tempTriangle2);
+              if (VERBOSE==1) {
+                cout << "I'm splitting triangle " << i  << " into:\n";
+                for (k=0; k<3; k++) {
+                  cout << tempTriangle[i] << ", ";
+                }
+                cout << "\nand:\n";
+                for (k=0; k<3; k++) {
+                  cout << tempTriangle2[i] << ", ";
+                }
+              }                                           
+              
+              //get rid of this triangle
+              triangleStack.erase( triangleStack.begin() + i );
+              
+              //push the two new ones on
+              triangleStack.push_back(tempTriangle);
+              triangleStack.push_back(tempTriangle2);
+            }
+          }
+        }
+        
+        
       }
     }
   }
@@ -1205,8 +1450,9 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
                                    vector<int>& weights, 
                                    vector<vector<rational> >& allVertices,
                                    vector<vector<int> >& allTriangles){
-  string povrayFileName = filename + ".pov";
-  string MathematicaFileName = filename + ".txt";
+  string povrayFileName = fileName + ".pov";
+  string MathematicaFileName = fileName + ".txt";
+  int i;
   fstream outfile;
  
   //write the povray file out
@@ -1224,7 +1470,7 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   outfile << "mesh2 {\n";
   outfile << "\tvertex_vectors {\n";
   outfile << "\t\t" << allVertices.size() << ",\n";
-  for (i=0; i<allVertices.size(); i++) {
+  for (i=0; i<(int)allVertices.size(); i++) {
     outfile << "\t\t<" << allVertices[i][0].get_d() << ","
                        << allVertices[i][1].get_d() << ","
                        << allVertices[i][2].get_d() << ">,\n";
@@ -1233,7 +1479,7 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   //and the triangles
   outfile << "\tface_indices {\n";
   outfile << "\t\t" << allTriangles.size() << ",\n";
-  for (i=0; i<allTriangles.size(); i++) {
+  for (i=0; i<(int)allTriangles.size(); i++) {
     outfile << "\t\t<" << allTriangles[i][0] << ","
                        << allTriangles[i][1] << ","
                        << allTriangles[i][2] << ">,\n";
@@ -1247,7 +1493,7 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   //write out the list of vertices to a text file (for mathematica, say)
   outfile.open(MathematicaFileName.c_str(), fstream::out);
   outfile << "{";
-  for (i=0; i<allVertices.size(); i++) {
+  for (i=0; i<(int)allVertices.size(); i++) {
     outfile << "{" << allVertices[i][0] << ", " 
                    << allVertices[i][1] << ", " 
                    << allVertices[i][1] << "}, ";
@@ -1290,9 +1536,9 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
   for (orthant=0; orthant<4; orthant++) {
     //invert as described above
     for (i=0; i<2; i++) {
-      if ( (orthant>>i)&1 == 1 ) {
+      if ( ((orthant>>i)&1) == 1 ) {
         //invert this chain
-        for (j=0; j<chains[i].size(); j++) {
+        for (j=0; j<(int)chains[i].size(); j++) {
           chains[i][j] = inverse(chains[i][j]);
         }
       }
@@ -1305,16 +1551,16 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
     //note we need to take the negative of the vertex coordinates which are
     //highlighted 1 in "orthant"
     for (i=0; i<2; i++) {
-      if ( (orthant>>i)&1 == 0) {
+      if ( ((orthant>>i)&1) == 0) {
         continue;
       }
       //invert the chain
-      for (j=0; j<chains[i].size(); j++) {
+      for (j=0; j<(int)chains[i].size(); j++) {
         chains[i][j] = inverse(chains[i][j]);
       }
       //invert the vertices
-      for (j=0; j<orthantVertices[orthant].size(); j++) {
-        orthantVertices[orthant][j][i] *= -1;
+      for (j=0; j<(int)orthantVertices[orthant].size(); j++) {
+        orthantVertices[orthant][j][i] = orthantVertices[orthant][j][i] * rational(-1,1);
       }
     }
   }
@@ -1331,10 +1577,10 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
   vector<rational> tempVertex(3);
   int currentOffset = 0;
   for (orthant=0; orthant<4; orthant++) {
-    for (i=0; i<orthantVertices[orthant].size(); i++) {
+    for (i=0; i<(int)orthantVertices[orthant].size(); i++) {
       allVertices.push_back(orthantVertices[orthant][i]);
     }
-    for (i=0; i<orthantTriangles[orthant].size(); i++) {
+    for (i=0; i<(int)orthantTriangles[orthant].size(); i++) {
       for (j=0; j<3; j++) {
         tempTriangle[j] = orthantTriangles[orthant][i][j] + currentOffset;
       }
@@ -1359,7 +1605,7 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
   }
   
   //ok now we've got a list of all of them, so print it
-  draw_ball_3D(chains, weights, allTriangles, allVertices);  
+  draw_ball_3D(fileName, chains, weights, allVertices, allTriangles);  
   
   
 }

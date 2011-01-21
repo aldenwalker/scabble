@@ -1,18 +1,19 @@
 CCC=g++
 CC=gcc
 CFLAGS= -O3 #-g -Wall
-LDFLAGS=-lglpk -lgmpxx -lgmp
+IFLAGS=-I/sw/include
+LDFLAGS=-L/sw/lib -lglpk -lgmpxx -lgmp
 all: scabble
 
 scabcc: scabble.cc word.cc rational.cc lp.cc
-	$(CCC) $(CFLAGS) -c scabble.cc word.cc rational.cc lp.cc
+	$(CCC) $(CFLAGS) $(IFLAGS) -c scabble.cc word.cc rational.cc lp.cc
 
 scabc: matrix.c
-	$(CC) $(CFLAGS) -c matrix.c
+	$(CC) $(CFLAGS) $(IFLAGS) -c matrix.c
 
 scabble: scabcc scabc
 	cd exlp-package; make
-	$(CCC) $(CFLAGS) -o scabble scabble.o word.o rational.o matrix.o lp.o exlp-package/*.o $(LDFLAGS)
+	$(CCC) $(CFLAGS) $(IFLAGS) -o scabble scabble.o word.o rational.o matrix.o lp.o exlp-package/*.o $(LDFLAGS)
 
 
 clean: 

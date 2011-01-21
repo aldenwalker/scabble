@@ -183,7 +183,14 @@ rational operator*(rational first, rational other) {
 }
 
 bool operator<(rational first, rational other) {
-  return (mpq_cmp(first.R, other.R) == -1);
+  //cout << "I'm comparing " << first.R << " to " << other.R << "\n";
+  int result = mpq_cmp(first.R, other.R);
+  //cout << "I got the result: " << result << "\n";
+  if (result < 0) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 bool operator==(rational first, rational other) {
@@ -192,11 +199,12 @@ bool operator==(rational first, rational other) {
 
 
 ostream& operator<<(ostream& os, rational r) {
-  if (mpz_cmp_si(mpq_denref(r.R), 1) == 0) {
-    os << mpz_get_si(mpq_numref(r.R));
-  } else { 
-    os << mpz_get_si(mpq_numref(r.R)) << "/" << mpz_get_si(mpq_denref(r.R));
-  }
+  //if (mpz_cmp_si(mpq_denref(r.R), 1) == 0) {
+  //  os << mpz_get_si(mpq_numref(r.R));
+  //} else { 
+  //  os << mpz_get_si(mpq_numref(r.R)) << "/" << mpz_get_si(mpq_denref(r.R));
+  //}
+  os << r.R;
   return os;
 }
 

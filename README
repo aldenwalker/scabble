@@ -1,9 +1,8 @@
 ##################################################
 /**************************************************************
 *                                                             *
-* scabble - calculates the unit scl ball in a 2-plane spanned *
-*           by two chains                                     *
-*                                                             *  
+* scabble - calculates the unit scl ball in a subspace spanned*
+*           by two or three chains                            *
 *                                                             *
 *   Copyright Danny Calegari and                              *
 *    Alden Walker 2010                                        *
@@ -16,21 +15,34 @@
 **************************************************************/
 ##################################################
 
-Version 1.0 - December 3, 2010
+Version 3d.0 - January 20, 2011
 
 
+scabble will produce the unit ball in either a 2d or a 3d slice of B_1^H.  It
+automatically decides which based on how many input chains it gets
 
-
-scabble uses the same theory as scallop to produce the unit scl ball in a 
-2-plane spanned by two chains.  The syntax is:
-./scabble [-v] [-mn] [-glpk] filename chain1 , chain2
+The syntax is:
+./scabble [-v] [-mn] [-glpk] filename chain1 , chain2 [, chain3]
 for example, 
 ./scabble test aabAAB , abAB
+or
+./scallop test aabAAB , abAB , abAABB ab
+
+For 2d:
 It outputs a drawing of the unit ball to filename.eps.
+For 3d:
+It produces filename.pov, which can be input to povray, for example with the
+command:
+povray -w1024 -h768 -a0.1 test.pov
+and it produces filename.txt, which is a Mathematica list of polygons
+
 -mn overrides the number of polygon sides to n
 -v causes verbose output
+
+
 By default, scabble uses exlp and GMP for all computations.  To use glpk instead,
 use the -glpk option.
+
 scabble will take integer coefficients on the input words, so 
 ./scabble test 5aabAAB , 7abAB
 works.
@@ -43,7 +55,9 @@ Compilation:
 
 Requirements:
 You need glpk and gmp installed in your path (i.e. somewhere that g++ can find
-the header files and libraries).  
+the header files and libraries).  You technically need gmpxx (the C++ gmp library),
+but actually, all it's used for is printing, so just get rid of that in 
+rational.cc, and you're fine.
 
 
 To compile, just type:
@@ -92,10 +106,8 @@ To rigorously compute scl for nonalternating input, take any
 input w and replace it by f(w) where f rewrites letters as string
 by the substitution rule:
 
-	a -> axa
-	A -> AXA
-	b -> byb
-	B -> BYB
+	a -> aaa
+  b -> bbb
 
 After rewriting, scallop f(w) will rigorously compute scl(w) even
 if w is nonalternating. However, in practice, the computation is

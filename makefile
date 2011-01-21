@@ -1,7 +1,7 @@
 CCC=g++
 CC=gcc
-CFLAGS= -g -Wall
-LDFLAGS=-lglpk -lgmp
+CFLAGS= -O3 #-g -Wall
+LDFLAGS=-lglpk -lgmpxx -lgmp
 all: scabble
 
 scabcc: scabble.cc word.cc rational.cc lp.cc

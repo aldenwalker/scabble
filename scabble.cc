@@ -21,6 +21,7 @@
 #include <math.h>
 #include <vector>
 #include <ctype.h>
+#include <algorithm>
 
 #include "word.h"
 #include "rational.h"
@@ -604,6 +605,9 @@ int min_scl_over_simplex(vector<vector<string> >& chains,
       }
       cout << "\n";
       cout << "With bounds " << parallelValueLower << " and " << parallelValueUpper << "\n";
+      if (parallelValueUpper < parallelValueLower) {
+        cout << "ERROR: upper is lower than lower?\n";
+      }
     }
     
     //now we have the parallelvector (which is the normal to our cutting plane)
@@ -1416,6 +1420,13 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
           cout << vertices[vertices.size()-1][i] << ", ";
         }
         cout << "\n";
+        for (i=0; i<(int)vertices.size()-1; i++) {
+          if (vertices[i][0] == newVertex[0] &&
+              vertices[i][1] == newVertex[1] &&
+              vertices[i][2] == newVertex[2]) {
+            cout << "ERROR: this vertex is the same as " << i << "\n";
+          }
+        }
       }
       triangleEdge = which_triangle_edge(vertices[currentTriangle[0]],
                                          vertices[currentTriangle[1]],
@@ -1437,7 +1448,7 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
         for (i=0; i<3; i++) {
           tempTriangle[0] = currentTriangle[i];
           tempTriangle[1] = currentTriangle[(i+1)%3];
-          tempTriangle[2] = vertices.size()-1;       // <-- we just pushed the new one on
+          tempTriangle[2] = vertices.size()-1;       // <-- we just pushed the new one on            
           triangleStack.push_back(tempTriangle);
         }
       } else {
@@ -1590,7 +1601,29 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
 
 
 
-
+/*****************************************************************************/
+/* a comparison function for vectors (just dictionary)                       */
+/*****************************************************************************/
+bool compare_vectors(const vector<rational>& a, const vector<rational>& b) {
+  if (a[0] < b[0]) {
+    return true;
+  } else if (b[0] < a[0]) {
+    return false;
+  }
+  //first are equal
+  if (a[1] < b[1]) {
+    return true;
+  } else if (b[1] < a[1]) {
+    return false;
+  }
+  //second are equal
+  if (a[2] < b[2]) {
+    return true;
+  } else if (b[2] < a[2]) {
+    return false;
+  }
+  return true;
+}
 /*****************************************************************************/
 /* create the unit ball in 3 dimensions!!                                    */
 /*****************************************************************************/
@@ -1705,6 +1738,49 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
     }
   }
   
+  
+  //find the defining hyperplanes
+  //technically, these hyperplanes might be wrong-sided, but that doesn't
+  //matter -- it's implicit that they cut off whatever side 0,0,0 is in
+  vector<vector<rational> > hyperplanes(0);
+  vector<rational> spanningVector1(3);
+  vector<rational> spanningVector2(3);
+  vector<rational> normalVector(3);
+  rational normalValue;
+  for (i=0; i<(int)allTriangles.size()/2; i++) {    
+    for (j=0; j<3; j++) {
+      spanningVector1[j] = allVertices[allTriangles[i][1]][j] 
+                           - allVertices[allTriangles[i][0]][j];
+      spanningVector2[j] = allVertices[allTriangles[i][2]][j] 
+                           - allVertices[allTriangles[i][0]][j];
+    }    
+    normalVector = cross_product(spanningVector1, spanningVector2);
+    normalValue = dot_product(normalVector, allVertices[allTriangles[i][0]]);
+    for (j=0; j<3; j++) {
+      normalVector[j] = normalVector[j] / normalValue;
+      //cout << normalVector[j] << "  ";
+    }
+    //cout << "\n";
+    //is it a duplicate?
+    for (j=0; j<(int)hyperplanes.size(); j++) {
+      if (hyperplanes[j][0] == normalVector[0] &&
+          hyperplanes[j][1] == normalVector[1] &&
+          hyperplanes[j][2] == normalVector[2]) {
+        //skip it
+        //cout << "dup\n";
+        break;
+      }
+    }
+    if (j==(int)hyperplanes.size()) {
+      hyperplanes.push_back(normalVector);
+    }
+  }
+  
+  //sort the hyperplanes
+  sort( hyperplanes.begin(), hyperplanes.end(), compare_vectors);
+    
+  
+  
   cout << "vertices: {";
   for (i=0; i<(int)allVertsNoDupes.size(); i++) {
     cout << "(" << allVertsNoDupes[i][0];
@@ -1715,12 +1791,34 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
   }
   cout << "\n";
   
+  cout << "Defining hyperplanes:\n";
+  for (i=0; i<(int)hyperplanes.size(); i++) {
+    for (j=0; j<3; j++) {
+      cout << hyperplanes[i][j] << "  ";
+    }
+    cout << "\n";
+  }
+    
   
   //ok now we've got a list of all of them, so print it
   draw_ball_3D(fileName, chains, weights, allVertices, allTriangles);  
   
   
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 int main(int argc, char* argv[]){
 
@@ -1737,9 +1835,11 @@ int main(int argc, char* argv[]){
   string drawFile = "";
 
   if(argc < 2 || strcmp(argv[1],"-h")==0){
-    cout << "usage: scabble [-v] [-glpk] [-mn] fileName [i_1]w_1 [i_1]w_2 . . [i_n]w_n , [j_1]v_1 [j_1]v_2 . . [j_m]v_m  \n";
+    cout << "usage: scabble [-v] [-glpk] [-mn] fileName chain1 , chain2 [, chain3]\n";
     cout << "\t\tproduces the unit ball in the plane spanned by the chains, output to fileName\n";
-    cout << "-mn overrides the max number of sides for the polygons\n";
+    cout << "\t-mn overrides the max number of sides for the polygons\n";
+    cout << "\t-v gives verbose output\n";
+    cout << "\t-glpk uses glpk (probably won't work due to precision issues\n";
     return(0);
   };
   

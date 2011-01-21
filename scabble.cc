@@ -1217,12 +1217,14 @@ int which_triangle_edge(vector<rational> v1,
                         vector<rational> v2,
                         vector<rational> v3,
                         vector<rational> newPoint) {
+  /*
   cout << "finding where " << newPoint[0] << ", " << newPoint[1] << ", " << newPoint[2] << "\n";
   cout << "is in the triangle:\n";
   cout << v1[0] << ", " << v1[1] << ", " << v1[2] << "\n";
   cout << v2[0] << ", " << v2[1] << ", " << v2[2] << "\n";
   cout << v3[0] << ", " << v3[1] << ", " << v3[2] << "\n";
-
+  */
+  
   int i;
   vector<rational> tempVector1(3);
   vector<rational> tempVector2(3);
@@ -1444,38 +1446,45 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
         //the edge into two new triangles
         //triangleEdge is the first index in currentTriangle of the edge on which
         //the new vertex lies
-        cout << "The new vertex splits an edge\n";  
+        if (VERBOSE==1) {
+          cout << "The new vertex splits an edge\n";  
+        }
         split_triangle_edge(currentTriangle, triangleEdge, vertices.size()-1, 
                                                            tempTriangle,
                                                            tempTriangle2);
         triangleStack.push_back(tempTriangle);
-        triangleStack.push_back(tempTriangle2);      
-        cout << "This triangle gets split into:\n";
-        for (i=0; i<3; i++) {
-          cout << tempTriangle[i] << ", ";
-        }
-        cout << "\nand:\n";
-        for (i=0; i<3; i++) {
-          cout << tempTriangle2[i] << ", ";
+        triangleStack.push_back(tempTriangle2);
+        if (VERBOSE==1) {      
+          cout << "This triangle gets split into:\n";
+          for (i=0; i<3; i++) {
+            cout << tempTriangle[i] << ", ";
+          }
+          cout << "\nand:\n";
+          for (i=0; i<3; i++) {
+            cout << tempTriangle2[i] << ", ";
+          }
         }
         
         //now we have to go through and split all triangles (there can be at 
         //most 1?) which have this edge
         for (i=0; i<(int)triangleStack.size(); i++) {
           for (j=0; j<3; j++) {
-            if (triangleStack[i][j] == currentTriangle[triangleEdge]
-                && triangleStack[i][(j+1)%3] == currentTriangle[(triangleEdge+1)%3]) {
+            if ((triangleStack[i][j] == currentTriangle[triangleEdge]
+                 && triangleStack[i][(j+1)%3] == currentTriangle[(triangleEdge+1)%3])
+                 ||
+                 (triangleStack[i][(j+1)%3] == currentTriangle[triangleEdge]
+                 && triangleStack[i][j] == currentTriangle[(triangleEdge+1)%3])) {
               split_triangle_edge(triangleStack[i], j, vertices.size()-1, 
                                                            tempTriangle,
                                                            tempTriangle2);
               if (VERBOSE==1) {
                 cout << "I'm splitting triangle " << i  << " into:\n";
                 for (k=0; k<3; k++) {
-                  cout << tempTriangle[i] << ", ";
+                  cout << tempTriangle[k] << ", ";
                 }
                 cout << "\nand:\n";
                 for (k=0; k<3; k++) {
-                  cout << tempTriangle2[i] << ", ";
+                  cout << tempTriangle2[k] << ", ";
                 }
               }                                           
               
@@ -1515,7 +1524,7 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
                                    vector<vector<int> >& allTriangles){
   string povrayFileName = fileName + ".pov";
   string MathematicaFileName = fileName + ".txt";
-  int i;
+  int i,j;
   fstream outfile;
  
   //write the povray file out
@@ -1523,12 +1532,19 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   
   //first, the preamble
   outfile << "#include \"colors.inc\"\n";
-  outfile << "background { color Cyan }\n";
+  outfile << "background { color White }\n";
   outfile << "camera {\n";
-  outfile << "\tlocation <5, 5, -8>\n";
+  outfile << "\tlocation <4, 4, 4>\n";
   outfile << "\tlook_at <0, 0, 0>\n";
   outfile << "}\n";
-  outfile << "light_source { <2, 6, -3> color White}\n";
+  outfile << "light_source { <0, 0, 7> color White}\n";
+  outfile << "light_source { <5, 0, -2> color White}\n";
+  outfile << "light_source { <-5, 0, -2> color White}\n";
+  outfile << "light_source { <10, 10, 10> color rgb<0.4, 0.4, 0.4>}\n";
+  outfile << "cylinder {\n  <0,0,0>, <3, 0, 0>, 0.01\n  pigment { Red }\n}\n";
+  outfile << "cylinder {\n  <0,0,0>, <0, 3, 0>, 0.01\n  pigment { Green }\n}\n";
+  outfile << "cylinder {\n  <0,0,0>, <0, 0, 3>, 0.01\n  pigment { Blue }\n}\n";
+
   
   //now, list the vertices
   outfile << "mesh2 {\n";
@@ -1557,15 +1573,19 @@ void draw_ball_3D(string fileName, vector<vector<string> >& chains,
   //write out the list of vertices to a text file (for mathematica, say)
   outfile.open(MathematicaFileName.c_str(), fstream::out);
   outfile << "{";
-  for (i=0; i<(int)allVertices.size(); i++) {
-    outfile << "{" << allVertices[i][0] << ", " 
-                   << allVertices[i][1] << ", " 
-                   << allVertices[i][1] << "}, ";
+  for (i=0; i<(int)allTriangles.size(); i++) {
+    outfile << "Polygon[{" ;
+    for (j=0; j<3; j++) {
+      outfile << "{" << allVertices[allTriangles[i][j]][0] << ", "
+                     << allVertices[allTriangles[i][j]][1] << ", "
+                     << allVertices[allTriangles[i][j]][2] << "}";
+      if (j<2) outfile << ",";
+    }
+    outfile << "}]";
+    if (i<(int)allTriangles.size()-1) outfile << ", ";
   }
   outfile << "}\n";
   outfile.close();
-  
-  
 }
 
 
@@ -1671,6 +1691,30 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
     }
     allTriangles.push_back(tempTriangle);
   }
+  
+  //remove duplicates and print the ball
+  vector<vector<rational> > allVertsNoDupes(0);
+  for (i=0; i<(int)allVertices.size(); i++) {
+    for (j=0; j<(int)allVertsNoDupes.size(); j++) {
+      if (allVertsNoDupes[j] == allVertices[i]) {
+        break;
+      }
+    }
+    if (j==(int)allVertsNoDupes.size()) {
+      allVertsNoDupes.push_back(allVertices[i]);
+    }
+  }
+  
+  cout << "vertices: {";
+  for (i=0; i<(int)allVertsNoDupes.size(); i++) {
+    cout << "(" << allVertsNoDupes[i][0];
+    for (j=1; j<3; j++) {
+      cout << ", " << allVertsNoDupes[i][j];
+    }
+    cout << "), ";
+  }
+  cout << "\n";
+  
   
   //ok now we've got a list of all of them, so print it
   draw_ball_3D(fileName, chains, weights, allVertices, allTriangles);  

@@ -1097,7 +1097,16 @@ void draw_ball(string fname, vector<vector<string> >& chains,
 }
 
 
- 
+/*****************************************************************************/
+/* create a loca unit ball in 2 dimensions                                   */
+/*****************************************************************************/
+void create_print_unit_ball_local(vector<vector<string> >& chains,
+                                  vector<int>& weights,
+                                  string fileName,
+                                  int maxjun, 
+                                  scallop_lp_solver solver,
+                                  int VERBOSE) {
+}
 
 /*****************************************************************************/
 /* create the unit ball in 2 dimensions                                      */
@@ -1192,6 +1201,12 @@ void create_print_unit_ball(vector<vector<string> >& chains,
   
   
 }
+
+
+
+
+
+
 
 
 
@@ -1827,6 +1842,7 @@ int main(int argc, char* argv[]){
   int VERBOSE = 0;
   int overrideMaxjun = 0;
   int overriddenMaxjun = -1;
+  int local = 0;
   
   scallop_lp_solver solver = EXLP;
   
@@ -1835,11 +1851,12 @@ int main(int argc, char* argv[]){
   string drawFile = "";
 
   if(argc < 2 || strcmp(argv[1],"-h")==0){
-    cout << "usage: scabble [-v] [-glpk] [-mn] fileName chain1 , chain2 [, chain3]\n";
+    cout << "usage: scabble [-v] [-glpk] [-mn] [-L] fileName chain1 , chain2 [, chain3]\n";
     cout << "\t\tproduces the unit ball in the plane spanned by the chains, output to fileName\n";
     cout << "\t-mn overrides the max number of sides for the polygons\n";
     cout << "\t-v gives verbose output\n";
     cout << "\t-glpk uses glpk (probably won't work due to precision issues\n";
+    cout << "\t-L gives the local ball around the first chain (three vertices)\n";
     return(0);
   };
   
@@ -1850,6 +1867,9 @@ int main(int argc, char* argv[]){
         break;
       case 'g':
         solver = GLPK_DOUBLE;
+        break;
+      case 'a':
+        local = 1;
         break;
       case 'm':
         overrideMaxjun = 1;
@@ -1990,8 +2010,10 @@ int main(int argc, char* argv[]){
   
   
   //create, draw the unit ball
-  if (chains.size() == 2) {
+  if (chains.size() == 2 && local == 0) {
     create_print_unit_ball(chains, weights, drawFile, maxjun, solver, VERBOSE);
+  } else if (chains.size() == 2 && local == 1) {
+    create_print_unit_ball_local(chains, weights, drawFile, maxjun, solver, VERBOSE);
   } else if (chains.size() == 3) {
     create_print_unit_ball_3D(chains, weights, drawFile, maxjun, solver, VERBOSE);
   } else {

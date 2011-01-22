@@ -1,6 +1,7 @@
 #include <vector>
 #include <iostream>
 #include <math.h>
+#include <string>
 
 #include "rational.h"
 
@@ -55,6 +56,12 @@ rational::rational(mpq_t q) {
 rational::rational(const rational& other) {
   mpq_init(R);
   mpq_set(R, other.R);
+}
+
+rational::rational(string s) {
+  mpq_init(R);
+  mpq_set_str(R, s.c_str(), 10);
+  mpq_canonicalize(R);
 }
 
 rational::~rational() {

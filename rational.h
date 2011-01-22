@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <string>
 #include <gmp.h>
 
 /******************************************************************************/
@@ -17,6 +18,7 @@ class rational {
     rational(int a, int b);
     rational(mpq_t q);
     rational(const rational& other);
+    rational(std::string s);
     ~rational();
     void get_mpq(mpq_t q);
     rational& operator=(const rational& rhs);

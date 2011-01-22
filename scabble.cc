@@ -1097,8 +1097,156 @@ void draw_ball(string fname, vector<vector<string> >& chains,
 }
 
 
+
 /*****************************************************************************/
-/* create a loca unit ball in 2 dimensions                                   */
+/* find the closest point to the x-axis                                      */
+/*****************************************************************************/
+vector<rational> closest_point_to_x_axis(vector<vector<string> >& chains,
+                                          vector<int>& weights,
+                                          int maxjun,
+                                          scallop_lp_solver solver,
+                                          rational& first_scl,
+                                          int VERBOSE) {
+  int i,j;
+  //We are going to find the unit ball locally at the first chain
+  //i.e. first +/- epsilon*second 
+  vector<arc> arc_list(0);
+  vector<polygon> polygon_list(0);
+  
+  //generate the arcs and stuff for the first pair
+  vector<string> wordList(0);
+  for (i=0; i<(int)chains[0].size(); i++) {
+    wordList.push_back(chains[0][i]);
+  }
+  for (i=0; i<(int)chains[1].size(); i++) {
+    wordList.push_back(chains[1][i]);
+  }
+  
+  
+  //generate the arcs!
+  generate_arcs(&arc_list, wordList, wordList.size());
+  int arc_list_length = arc_list.size();
+  
+  if(VERBOSE==1){
+    cout << "generated arcs\n";
+    if (VERBOSE >1) {
+      cout << arc_list_length << " arcs (start letter, end letter, start word, end word) \n";
+      for(i=0;i<arc_list_length;i++){
+	      cout << "arc " << i << " : ";
+	      cout << arc_list[i].first << " " << arc_list[i].last << " " << arc_list[i].first_word << " " << arc_list[i].last_word << "\n";
+  
+      }
+    }
+  };
+  
+  //generate the polygons!
+  generate_polygons(wordList, polygon_list, arc_list, maxjun); 
+  int polygon_list_length = polygon_list.size();
+  
+  if(VERBOSE==1){
+    cout << "generated polygons\n";
+    if (VERBOSE>1) {
+      cout << polygon_list_length << " polygons (cyclic list of arcs) \n";
+      for(i=0;i<polygon_list_length;i++){
+	      cout << "polygon " << i << " : ";
+	      for(j=0;j<polygon_list[i].size;j++){
+	        cout << polygon_list[i].arc[j] << " ";
+	      };
+	      cout << '\n';
+      }
+    }
+  }
+  
+  //create the constraint matrix
+  RatMat* constraints = new RatMat[1];
+  vector<int> equalityType;
+  
+  create_constraint_matrix(chains, arc_list, polygon_list, weights, constraints,
+                                                                    equalityType);
+  if (VERBOSE==1) {
+    //cout << "Constraint Matrix:\n";
+    //RatMat_print(constraints, 1);       
+  }                                           
+
+  //pick the two starting points -- we will set epsilon really close to zero
+  vector< vector<rational> > points(2);
+  points[0].resize(2);
+  points[0][0] = rational(1,1);
+  points[0][1] = rational(0,1);
+  points[1].resize(2);
+  points[1][0] = rational(1,1);
+  points[1][1] = rational(1,1000);
+  
+  if (VERBOSE == 1) {
+    cout << "Generated starting points\n"; fflush(stdout);
+  }
+  
+  //find their scls and scale
+  rational scl;
+  if (first_scl < rational(0,1)) {
+    scl = point_scl(chains, arc_list, polygon_list, weights, 
+                                                    constraints, 
+                                                    equalityType, 
+                                                    points[0], 
+                                                    solver, 
+                                                    VERBOSE);
+    first_scl = scl;
+  } else {
+    scl = first_scl;
+  }
+  for (i=0; i<2; i++) {
+    if (i>0)  scl = point_scl(chains, arc_list, polygon_list, weights, 
+                                                    constraints, 
+                                                    equalityType, 
+                                                    points[i], 
+                                                    solver, 
+                                                    VERBOSE);
+    if (VERBOSE) {
+      cout << "Found scl of point "<< i << ": " << scl << "\n";
+    }
+    for (j=0; j<2; j++) {
+      points[i][j] = points[i][j]/scl;
+    }
+  }
+
+  
+  //now we go into the main loop -- except we don't care about recording
+  //everything; we just want to keep the point closest to the x-axis
+  vector<rational> newPoint;
+  while (1) {
+    newPoint = min_point_on_line(chains, arc_list, polygon_list, 
+                                                   weights,
+                                                   constraints,
+                                                   equalityType,
+                                                   points, 
+                                                   solver, 
+                                                   VERBOSE);
+    if (newPoint[0] == points[0][0] && newPoint[1] == points[0][1]) { //if scl is linear
+      if (VERBOSE==1) {
+        cout << "scl appears to be linear between these points\n";
+      }
+      delete[] constraints;
+      return points[1];
+    } else {
+      points[1] = newPoint;
+    }
+  }
+  
+  //we should never be here
+  cout << "Error\n";
+  return newPoint;
+  
+}
+
+
+/*****************************************************************************/
+/* vector length                                                             */
+/*****************************************************************************/
+double vector_length(vector<double>& a) {
+  return sqrt(a[0]*a[0] + a[1]*a[1]);
+}
+/*****************************************************************************/
+/* create a local unit ball in 2 dimensions (three points around the x-axis) */
 /*****************************************************************************/
 void create_print_unit_ball_local(vector<vector<string> >& chains,
                                   vector<int>& weights,
@@ -1106,6 +1254,32 @@ void create_print_unit_ball_local(vector<vector<string> >& chains,
                                   int maxjun, 
                                   scallop_lp_solver solver,
                                   int VERBOSE) {
+  //just record the two points
+  rational first_scl = rational(-1,1);
+  vector<rational> point1;
+  vector<rational> point2;
+  int i;
+  
+  point1 = closest_point_to_x_axis(chains, weights, maxjun, solver, first_scl, VERBOSE);
+  for (i=0; i<(int)chains[1].size(); i++) {
+    chains[1][i] = inverse(chains[1][i]);
+  }
+  point2 = closest_point_to_x_axis(chains, weights, maxjun, solver, first_scl, VERBOSE);
+  point2[1] = -point2[1];
+  cout << "(" << point2[0] << ", " << point2[1] << "), (" << 
+                rational(1,1)/first_scl << ", 0), (" << 
+                point1[0] << ", " << point2[1] << ")\n";
+  
+  //now print the angle between them
+  vector<double> dir1(2);
+  vector<double> dir2(2);
+  dir1[0] = 1/first_scl.get_d() - point2[0].get_d();
+  dir1[1] = -point2[1].get_d();
+  dir2[0] = point1[0].get_d() - 1/first_scl.get_d();
+  dir2[1] = point1[1].get_d();
+  double angle = acos( (dir1[0]*dir2[0] + dir1[1]*dir2[1]) / 
+                       (vector_length(dir1)*vector_length(dir2)) );
+  cout << "angle = " << angle << "\n";
 }
 
 /*****************************************************************************/
@@ -1868,7 +2042,7 @@ int main(int argc, char* argv[]){
       case 'g':
         solver = GLPK_DOUBLE;
         break;
-      case 'a':
+      case 'L':
         local = 1;
         break;
       case 'm':

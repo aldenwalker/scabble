@@ -1,6 +1,6 @@
 CCC=g++
 CC=gcc
-CFLAGS= -g -Wall
+CFLAGS= -O3#-g -Wall
 IFLAGS=-I/sw/include
 LDFLAGS=-L/sw/lib -lglpk -lgmpxx -lgmp
 all: scabble

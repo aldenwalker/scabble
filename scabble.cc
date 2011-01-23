@@ -1268,7 +1268,7 @@ void create_print_unit_ball_local(vector<vector<string> >& chains,
   point2[1] = -point2[1];
   cout << "(" << point2[0] << ", " << point2[1] << "), (" << 
                 rational(1,1)/first_scl << ", 0), (" << 
-                point1[0] << ", " << point2[1] << ")\n";
+                point1[0] << ", " << point1[1] << ")\n";
   
   //now print the angle between them
   vector<double> dir1(2);
@@ -1277,8 +1277,14 @@ void create_print_unit_ball_local(vector<vector<string> >& chains,
   dir1[1] = -point2[1].get_d();
   dir2[0] = point1[0].get_d() - 1/first_scl.get_d();
   dir2[1] = point1[1].get_d();
-  double angle = acos( (dir1[0]*dir2[0] + dir1[1]*dir2[1]) / 
-                       (vector_length(dir1)*vector_length(dir2)) );
+  double cosa = (dir1[0]*dir2[0] + dir1[1]*dir2[1]) / 
+                       (vector_length(dir1)*vector_length(dir2));
+  if (cosa > 1.0) cosa = 1.0;
+  double angle = acos( cosa );
+  //cout << "dir1: " << dir1[0] << ", " << dir1[1] << "\n";
+  //cout << "dir2: " << dir2[0] << ", " << dir2[1] << "\n";
+  //cout << "acos input: " << cosa << "\n";
+  //cout << acos(cosa) << "\n";
   cout << "angle = " << angle << "\n";
 }
 

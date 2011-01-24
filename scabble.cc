@@ -1387,8 +1387,21 @@ void create_print_unit_ball(vector<vector<string> >& chains,
 
 
 
-
-
+/*****************************************************************************/
+/* distance between two vectors                                              */
+/*****************************************************************************/
+double vector_distance(vector<rational>& a, vector<rational>& b) {
+  double ans = 0;
+  double ad, bd;
+  int i;
+  for (i=0; i<a.size(); i++) {
+    ad = a[i].get_d();
+    bd = b[i].get_d();
+    ans += (ad-bd)*(ad-bd);
+  }
+  ans = sqrt(ans);
+  return ans;
+}
 
 /*****************************************************************************/
 /* split a triangle along edge edgeToSplit and generate two new triangles    */
@@ -1452,10 +1465,13 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
                                vector<int>& weights, 
                                int maxjun, 
                                scallop_lp_solver solver, 
+                               int approximate,
+                               rational tolerance,
                                int VERBOSE,
                                vector<vector<rational> >& orthantVertices,
                                vector<vector<int> >& orthantTriangles) {
   int i,j,k;
+  double toleranceDouble = tolerance.get_d();
   
   //first, make a flat list of all the words
   vector<string> wordList(0);
@@ -1608,6 +1624,21 @@ void  ball_in_positive_orthant(vector<vector<string> >& chains,
     } else {
       //it's not linear over the triangle, so we have to add in either 2 or
       //3 new triangles, depending on whether it's on a line
+      
+      //except, if we are doing the approximate one, and the triangle is small
+      //enough, just add it in
+      if (approximate == 1) {
+        if (vector_distance(vertices[currentTriangle[0]], vertices[currentTriangle[1]]) < toleranceDouble
+           && vector_distance(vertices[currentTriangle[0]], vertices[currentTriangle[1]]) < toleranceDouble) {
+          if (VERBOSE==1) {
+            cout << "This triangle is small, so I'm just pushing it on\n";
+          }
+          finalTriangles.push_back(currentTriangle);
+          continue;
+        }
+      }
+      
+      //ok we're not approximating, so go at it    
       vertices.push_back(newVertex);
       if (VERBOSE==1) {
         cout << "Added new vertex number " << vertices.size()-1 << ": ";
@@ -1827,6 +1858,8 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
                               string fileName,
                               int maxjun, 
                               scallop_lp_solver solver,
+                              int approxmiate,
+                              rational tolerance,
                               int VERBOSE) {
   //in 3 dimensions, we can't just list all the points in order, so we will 
   //produce a list a points (vertices), plus a list of triples of indices, which
@@ -1856,9 +1889,11 @@ void create_print_unit_ball_3D(vector<vector<string> >& chains,
       }
     }
     //compute the orthant
-    ball_in_positive_orthant(chains, weights, maxjun, solver, VERBOSE,
-                             orthantVertices[orthant],
-                             orthantTriangles[orthant]);
+    ball_in_positive_orthant(chains, weights, maxjun, solver, approxmiate, 
+                                                              tolerance,
+                                                              VERBOSE,
+                                                   orthantVertices[orthant],
+                                                   orthantTriangles[orthant]);
     //now fix the orthant vertices, and invert the chains back
     //note we need to take the negative of the vertex coordinates which are
     //highlighted 1 in "orthant"
@@ -2023,6 +2058,8 @@ int main(int argc, char* argv[]){
   int overrideMaxjun = 0;
   int overriddenMaxjun = -1;
   int local = 0;
+  int approximate = 0;
+  rational tolerance = rational(-1,1);
   
   scallop_lp_solver solver = EXLP;
   
@@ -2036,6 +2073,7 @@ int main(int argc, char* argv[]){
     cout << "\t-mn overrides the max number of sides for the polygons\n";
     cout << "\t-v gives verbose output\n";
     cout << "\t-glpk uses glpk (probably won't work due to precision issues\n";
+    cout << "\t-tn gives an approximation tolerance of 1/n\n";
     cout << "\t-L gives the local ball around the first chain (three vertices)\n";
     return(0);
   };
@@ -2050,6 +2088,10 @@ int main(int argc, char* argv[]){
         break;
       case 'L':
         local = 1;
+        break;
+      case 't':
+        approximate = 1;
+        tolerance = rational(1, atoi(&(argv[1][2])));
         break;
       case 'm':
         overrideMaxjun = 1;
@@ -2195,7 +2237,7 @@ int main(int argc, char* argv[]){
   } else if (chains.size() == 2 && local == 1) {
     create_print_unit_ball_local(chains, weights, drawFile, maxjun, solver, VERBOSE);
   } else if (chains.size() == 3) {
-    create_print_unit_ball_3D(chains, weights, drawFile, maxjun, solver, VERBOSE);
+    create_print_unit_ball_3D(chains, weights, drawFile, maxjun, solver, approximate, tolerance, VERBOSE);
   } else {
     cout << "You have too many chains or something\n";
   }
